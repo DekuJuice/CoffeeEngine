@@ -1,6 +1,5 @@
-local module = {}
 
-function module.copy(t, do_recurse)
+function table.copy(t, do_recurse)
     
     local c = {}
     
@@ -15,5 +14,3 @@ function module.copy(t, do_recurse)
     return c
 end
 
-
-return module

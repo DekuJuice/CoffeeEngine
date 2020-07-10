@@ -4,13 +4,16 @@ local Node2d = require("class.engine.Node2d")
 local Sprite = Node2d:subclass("Sprite")
 local Texture = require("class.engine.resource.Texture")
 
-Sprite:export_var("texture", "resource", function(val)
-    return val:isInstanceOf(Texture)
-end, {resource_type="Texture"} )
+Sprite:export_var("texture", "resource", {
+    resource_type="Texture",
+    filter = function(val)
+        return val:isInstanceOf(Texture)
+    end
+})
 
-Sprite:export_var("offset", "vec2", nil )
-Sprite:export_var("scale", "vec2", nil, {speed = 0.01, min = 0, max=8} )
-Sprite:export_var("rotation", "float", nil, {speed = 0.01, min=-math.pi * 2, max=math.pi * 2} )
+Sprite:export_var("offset", "vec2" )
+Sprite:export_var("scale", "vec2", {speed = 0.01, min = 0, max=8} )
+Sprite:export_var("rotation", "float", {speed = 0.01, min=-math.pi * 2, max=math.pi * 2} )
 Sprite:export_var("flip_h", "bool")
 Sprite:export_var("flip_v", "bool")
 

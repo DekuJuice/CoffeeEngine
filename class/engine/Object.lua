@@ -1,11 +1,10 @@
 -- Base class for all objects
 -- Includes a signal/slot system
-
+local binser = require("enginelib.binser")
 local class = require("enginelib.middleclass")
-
 local Object = class("Object")
 
--- define_get_set is a macro for defining setget functions
+-- Create generic getters/setters for the given property
 Object.static.define_get_set = function(class, name)
     class[("set_%s"):format(name)] = function(self, v) self[name] = v end
     class[("get_%s"):format(name)] = function(self) return self[name] end
@@ -15,6 +14,65 @@ end
 Object.static.define_signal = function(class, name)
     class.static.signals = rawget(class.static, "signals") or {} -- Create signals table it does not exist
     table.insert(class.static.signals, name)
+end
+
+-- Exports a member of the class, marking it for serialization, and allowing it to be displayed in the editor if desired
+-- Also defines standard getset functions for it
+-- filter specifies a filter function on entered data to validate it
+-- Editor hints are hints to how the editing widget should be displayed, ie names of fields in vectors, 
+-- min/max ranges, etc
+-- These vary depending on the datatype, check _draw_property_widget in class/editor/Editor.lua for more details
+Object.static.export_var = function(class, name, datatype, editor_hints)
+    
+    assert(name ~= nil, "A name must be given!")
+    assert(datatype ~= nil, "A datatype must be specified!")
+    
+    class.static.exported_vars = rawget(class.static, "exported_vars") or {} -- Create export table if it does not exist
+
+    -- Make sure getsets exist for this var, even if none are manually defined
+    class:define_get_set(name)
+    
+    table.insert(class.static.exported_vars, 
+        {type = datatype, 
+        name = name, 
+        editor_hints = editor_hints or {}})
+end
+
+-- serialization saves all exported variables into a key-value table
+function Object:_serialize()
+    local res = {}
+    local cur_class = self.class
+    while (cur_class) do
+        local static = rawget(cur_class, "static")
+        if static then
+            local exported = rawget(static, "exported_vars")
+            
+            if exported then
+                for _, ep in ipairs(exported) do
+                    local getter = ("get_%s"):format(ep.name)
+                    res[ep.name] = self[getter](self)
+                end
+            end
+        end        
+        
+        cur_class = cur_class.super
+    end
+    return res
+end
+
+Object.static._deserialize = function(class, res)
+    local instance = class()
+    for k,v in pairs(res) do
+        local setter = ("set_%s"):format(k)
+        instance[setter](instance, v)
+    end
+    
+    return instance
+end
+
+-- Serialization uses metatables to determine type, so we need to register all subclasses as well
+Object.static.subclassed = function(class, other)
+    binser.registerClass(other)
 end
 
 function Object:initialize()
@@ -34,7 +92,7 @@ function Object:initialize()
     end
 end
 
--- connect(signal, target, method)
+-- Connect a signal to a slot (method)
 -- signal (string) is the name of the signal
 -- target (Object) is the object to connect to
 -- method (string) is the name of the method in the target object
@@ -47,7 +105,7 @@ function Object:connect(signal, target, method)
     table.insert( target.connections, {subject = self, signal = signal, method = method} )
 end
 
--- disconnect(signal, target, method)
+-- Disconnect a signal
 -- signal (string) is the name of the signal
 -- target (Object) is the object connected
 -- method (string) is the name of the method in the target object
@@ -64,6 +122,7 @@ function Object:disconnect(signal, target, method)
     error("Signal is not connected")
 end
 
+-- Signals should be disconnected when an object is to be destroyed
 function Object:disconnect_all()
     for name, signals in pairs(self.signals) do
         for _, c in ipairs(signals) do
@@ -102,6 +161,7 @@ function Object:emit_signal(signal, ...)
     end
 end
 
+-- Internal helper for disconnecting signals
 function Object:_remove_connection(subject, signal, method)
     for i,c in ipairs(self.connections) do
         if c.subject == subject and c.signal == signal and c.method == method then

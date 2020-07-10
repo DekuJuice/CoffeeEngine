@@ -1,6 +1,3 @@
-local tableutil = require("enginelib.tableutil")
-local resource = require("resource")
-
 local PackedScene = require("class.engine.resource.PackedScene")
 local SceneTree = require("class.engine.SceneTree")
 local Object = require("class.engine.Object")
@@ -40,12 +37,9 @@ function SceneModel:initialize(loadpath)
     
     self.tree = SceneTree()
     
-    
-    
     if loadpath then
         self.modified = false
-        resource.load(loadpath) -- Force reload of the scene
-        self.packed_scene = resource.get_resource(loadpath)
+        self.packed_scene = get_resource(loadpath)
         self.tree:set_root(self.packed_scene:instance())
     else
         self.modified = true
@@ -81,11 +75,11 @@ function SceneModel:get_tree()
 end
 
 function SceneModel:set_selected_nodes(nodes)
-    self.selected_nodes = tableutil.copy(nodes)
+    self.selected_nodes = table.copy(nodes)
 end
 
 function SceneModel:get_selected_nodes()
-    return tableutil.copy(self.selected_nodes)
+    return table.copy(self.selected_nodes)
 end
 
 function SceneModel:is_selected(node)

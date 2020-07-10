@@ -1,5 +1,4 @@
 local vec2 = require("enginelib.vec2")
-local tableutil = require("enginelib.tableutil")
 
 local Node = require("class.engine.Node")
 local Node2d = require("class.engine.Node2d")
@@ -100,7 +99,7 @@ function Node2dPlugin:update(dt)
                     table.insert(current_positions, {c, c:get_global_position()})
                 end
             end
-            local old_positions = tableutil.copy(self.position_cache)
+            local old_positions = table.copy(self.position_cache)
             
             model:start_command("Move Nodes", false)
             

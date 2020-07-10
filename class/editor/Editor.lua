@@ -1,14 +1,17 @@
 local log = require("enginelib.log")
 local lily = require("enginelib.lily")
 local vec2 = require("enginelib.vec2")
-local resource = require("resource")
 local scaledraw = require("enginelib.scaledraw")
 
+local Texture = require("class.engine.resource.Texture")
 local Node = require("class.engine.Node")
 local Node2d = require("class.engine.Node2d")
 
 local SceneModel = require("class.editor.SceneModel")
-local PackedScene = require("class.engine.resource.PackedScene")
+
+local ImguiResourceSelector = require("class.editor.ImguiResourceSelector")
+local ImguiNodeSelector = require("class.editor.ImguiNodeSelector")
+local ImguiResourceInspector = require("class.editor.ImguiResourceInspector")
 
 local Editor = Node:subclass("Editor")
 Editor.static.dontlist = true
@@ -17,18 +20,6 @@ local MIN_ZOOM = 0.5
 local MAX_ZOOM = 8.0
 local LOG_MIN_ZOOM = math.log(MIN_ZOOM)
 local LOG_MAX_ZOOM = math.log(MAX_ZOOM)
-
--- f(x) = e^(a + bx)
--- a = log_min_zoom
--- b = log_max_zoom - log_min_zoom
-local function get_exp_scale(scale)
-    return math.exp( LOG_MIN_ZOOM + (LOG_MAX_ZOOM - LOG_MIN_ZOOM) * scale ) 
-end
-
--- f-1(x) = (log(x) - a) / b
-local function get_log_scale(scale)
-    return (math.log(scale) - LOG_MIN_ZOOM) / (LOG_MAX_ZOOM - LOG_MIN_ZOOM)
-end
 
 local MENU_DEF = {
     {name = "File", items = {
@@ -61,6 +52,18 @@ local SHORTCUTS = {
     ["Ctrl+n"]="new"
 }
 
+-- f(x) = e^(a + bx)
+-- a = log_min_zoom
+-- b = log_max_zoom - log_min_zoom
+local function get_exp_scale(scale)
+    return math.exp( LOG_MIN_ZOOM + (LOG_MAX_ZOOM - LOG_MIN_ZOOM) * scale ) 
+end
+
+-- f-1(x) = (log(x) - a) / b
+local function get_log_scale(scale)
+    return (math.log(scale) - LOG_MIN_ZOOM) / (LOG_MAX_ZOOM - LOG_MIN_ZOOM)
+end
+
 local function draw_grid(ox, oy, w, h, cellw, cellh)
     for x = 0, w, cellw do
         love.graphics.line(x + ox, 0, x + ox, h)
@@ -69,6 +72,53 @@ local function draw_grid(ox, oy, w, h, cellw, cellh)
     for y = 0, h, cellh do
         love.graphics.line(0, y + oy, w, y + oy)
     end
+end
+
+local function create_file_tree(path)
+    local root = TreeData(path)
+    local stack = {path}
+    local data_stack = {root}
+    
+    while (#stack > 0) do
+        local top = table.remove(stack)
+        local node = table.remove(data_stack)
+        for _,v in ipairs(love.filesystem.getDirectoryItems(top)) do
+            local p = top .. "/" .. v
+            local info = love.filesystem.getInfo(p) 
+            if info.type == "directory" then                
+                table.insert(stack, p)
+                local child = TreeData(v)
+                node:add_child(child)
+                table.insert(data_stack, child)
+            elseif info.type == "file" then
+                node:add_child(TreeData(v, p))
+            end
+        end
+    end
+    
+    return root
+end
+
+
+-- The first time the editor is loaded, we require every class, so that we can
+-- traverse the parent classes to find subclasses. This is useful for listing them in
+-- the editor
+do
+
+local function preload_class(dir)
+    for _,v in ipairs(love.filesystem.getDirectoryItems(dir)) do
+        local path = dir .. "/" .. v
+        local info = love.filesystem.getInfo(path)
+        if info.type == "directory" then
+            preload_class(path)
+        else
+            require(path:match("^[^%.]+"):gsub("/", "."))
+        end
+    end
+end
+
+preload_class("class/engine")
+
 end
 
 function Editor:initialize()
@@ -84,17 +134,28 @@ function Editor:initialize()
     self.view_y = 0
     self.actions_to_do = {}
     
-    self.show_window = {
-        node_tree = true,
-        inspector = true,
-        signals = true
-    }
+    self.selected_resources = {}
+    self.inspected_resource = nil
     
-    self.resource_preview_canvas = love.graphics.newCanvas(128, 128)
+    -- Add other components of the editor
+    self.resource_browser = ImguiResourceSelector()
+    self.resource_browser:set_window_name("Resources")
+    self.resource_browser:set_modal(false)    
     
-    self:add_child(require("class.editor.Node2dPlugin")())
+    self.node_browser = ImguiNodeSelector()
+    self.node_browser:set_window_name("Nodes")
+    self.node_browser:set_modal(false)
+    
+    self.resource_inspector = ImguiResourceInspector()
+    self.resource_inspector:set_window_name("Inspector")
     
     
+    self.show_resource_inspector = true -- whether to show resource inspector or node inspector
+    
+    
+    --self:add_child(require("class.editor.Node2dPlugin")())
+    --self:add_child(require("class.editor.TileMapPlugin")())
+
     self:add_new_scene() -- Make sure there is always at least one scene open
 end
 
@@ -149,27 +210,6 @@ function Editor:save_scene()
         return 
     end
     
-    local tname = os.tmpname()
-    if not tname then
-        log.error("Failed to generate tmp filename, could not save the scene")
-        return
-    end
-
-    local data = model:pack()
-    
-    local lobj = lily.write(tname, data)
-    lobj:onComplete(function()
-        local real_save = love.filesystem.getSaveDirectory()
-        local real_tmp = real_save .. tname
-        
-        local real_path = love.filesystem.getWorkingDirectory() .. "/" .. path
-        -- Remove old file first
-        os.remove(real_path)
-        os.rename(real_tmp, real_path)
-        
-        model:set_modified(false)
-    end)
-    
 end
 
 function Editor:transform_to_world(x, y)
@@ -188,8 +228,8 @@ function Editor:draw()
 
     -- Demo window --
     imgui.ShowDemoWindow() 
-
-    -- Menu Bar --
+    
+    -- Main Menu Bar --
     local menu_bar_height = 0 
 
     if imgui.BeginMainMenuBar() then
@@ -218,21 +258,19 @@ function Editor:draw()
         menu_bar_height = mh
         imgui.EndMainMenuBar()
     end
+
     
-    self:do_actions()
-    
-    -- Tabbar
-    
+    -- Tabbar --
     imgui.SetNextWindowPos(0, menu_bar_height)
     imgui.SetNextWindowSize(love.graphics.getWidth(), 40)
-    imgui.PushStyleVar("WindowBorderSize", 0)
+    imgui.PushStyleVar("ImGuiStyleVar_WindowBorderSize", 0)
     imgui.Begin("Scenes", true, 
         {
         "ImGuiWindowFlags_NoTitleBar", 
         "ImGuiWindowFlags_NoMove", 
         "ImGuiWindowFlags_NoResize",
         "ImGuiWindowFlags_NoBringToFrontOnFocus",
-        "ImGuiWindowFlags_NoDocking"
+        "ImGuiWindowFlags_NoDocking",
         }
     )
     imgui.PopStyleVar(1)
@@ -271,8 +309,8 @@ function Editor:draw()
     self.view_y = lh + menu_bar_height
 
     imgui.End()
-    
-    do -- Draw nodes
+
+    do -- Scene Nodes
         local vx = 0
         local vy = self.view_y
         local vx2, vy2 = love.graphics.getDimensions()
@@ -339,21 +377,43 @@ function Editor:draw()
             curmodel:get_tree():draw(0, vy, vw, vh)            
         end
     end
-
-
-    -- Other editor components
-    self:draw_node_tree()
-    self:draw_node_inspector()
-    -- Modal Windows
-    self:draw_alert_modal()
-    self:draw_save_as_modal()
-    self:draw_open_scene_modal() 
-
+    
+    -- Resource Browser --
+    if self.resource_browser:begin_window() then
+        local changed, new_selection = self.resource_browser:display(self.selected_resources)
+        self.selected_resources = new_selection
+        if changed then
+            self.inspected_resource = get_resource(self.selected_resources[1])
+        end
+        
+    end
+    self.resource_browser:end_window()
+    
+    -- Node Browser
+    if self.node_browser:begin_window() then
+        
+        local model = self:get_active_scene()
+        self.node_browser:set_scene_model(model)
+        local changed, new_selection = self.node_browser:display( model:get_selected_nodes() )
+        
+        if changed then
+            model:set_selected_nodes(new_selection)
+        end
+        
+    end
+    self.node_browser:end_window()
+    
+    if self.show_resource_inspector then
+        if self.resource_inspector:begin_window() then
+            self.resource_inspector:display(self.inspected_resource)
+        end
+        self.resource_inspector:end_window()
+    end
+    
 end
 
 -- Modals
-
-local function get_scene_list()
+function Editor:get_scene_list()
     local stack = {}
     local scenes = {}
     table.insert(stack, "scene")
@@ -375,7 +435,7 @@ local function get_scene_list()
     return scenes
 end
 
-local function get_resource_list()
+function Editor:get_resource_list()
     local stack = {}
     local resources = {}
     table.insert(stack, "assets")
@@ -395,7 +455,6 @@ local function get_resource_list()
     table.sort(resources)
     
     return resources
-
 end
 
 -- Alert Modal
@@ -473,557 +532,6 @@ function Editor:draw_save_as_modal()
     
         imgui.EndPopup()
     end
-end
-
--- Open scene prompt
-function Editor:open_open_scene_modal()
-    imgui.OpenPopup("Open Scene")
-end
-
-function Editor:draw_open_scene_modal()
-    local flags = {
-        "ImGuiWindowFlags_AlwaysAutoResize", 
-        "ImGuiWindowFlags_NoResize",
-        "ImGuiWindowFlags_NoMove"
-    }
-    if imgui.BeginPopupModal("Open Scene", nil, flags) then
-        
-        local scenes = get_scene_list()
-        imgui.BeginChild("Scene List", 400, 400)
-        for _,s in ipairs(scenes) do
-            if (imgui.Selectable(s, false, {"ImGuiSelectableFlags_AllowDoubleClick"})) then
-                if (imgui.IsMouseDoubleClicked(0)) then
-                    self:add_new_scene(s)
-                    imgui.CloseCurrentPopup()
-                end
-            end
-        end
-        imgui.EndChild()
-        
-        
-        imgui.Separator()
-        
-        if imgui.Button("Cancel", 120, 0) then
-            imgui.CloseCurrentPopup()
-        end
-        
-        imgui.EndPopup()
-    end
-end
-
--- Add node prompt
-function Editor:open_node_list_modal()
-    imgui.OpenPopup("Add a new node")
-end
-
-function Editor:draw_node_list_modal()
-    local popup_flags = {
-        "ImGuiWindowFlags_AlwaysAutoResize", 
-        "ImGuiWindowFlags_NoResize",
-        "ImGuiWindowFlags_NoMove"
-    }
-    
-    if imgui.BeginPopupModal("Add a new node", nil, popup_flags) then
-        imgui.BeginChild("Scene List", 400, 400)
-    
-        -- Iterative Preorder Traversal
-        local stack = {}
-        local current_class = Node
-        repeat
-            -- Add subclasses to stack
-            local subclasses = {}
-            local has_subclasses = false
-            for c in pairs(current_class.subclasses) do
-                if not c.static.dontlist then
-                    table.insert(subclasses, c)
-                    has_subclasses = true
-                end
-            end
-            
-            
-            local flags = {
-                "ImGuiTreeNodeFlags_DefaultOpen",
-                "ImGuiTreeNodeFlags_OpenOnArrow", 
-                "ImGuiTreeNodeFlags_SpanAvailWidth",
-                "ImGuiTreeNodeFlags_SpanFullWidth"
-            }
-            
-            if not has_subclasses then
-                table.insert(flags, "ImGuiTreeNodeFlags_Leaf")
-            end
-            
-            local open = imgui.TreeNodeEx(current_class.name, flags)
-            
-            if imgui.IsItemHovered() then
-                local x, y = imgui.GetItemRectMin()
-                local mx, my = imgui.GetMousePos()
-                local spacing = imgui.GetTreeNodeToLabelSpacing()
-                    
-                local m1 = imgui.IsMouseDoubleClicked(0)
-                local m2 = imgui.IsMouseReleased(1)
-                    
-                if (m1 or m2) 
-                and (not has_subclasses or (mx - x > spacing)) then
-                    local scene = self:get_active_scene()
-                    local instance = current_class()
-                    
-                    scene:start_command("AddNode", false)
-                    local selection = scene:get_selected_nodes()
-                    local path = "/"
-                    if selection[1] then
-                        path = selection[1]:get_absolute_path()
-                    elseif scene:get_tree():get_root() then
-                        path = scene:get_tree():get_root():get_absolute_path()
-                    end
-                    
-                    scene:add_do_function(function()
-                        scene:add_node(path, instance)
-                    end)
-                    
-                    scene:add_undo_function(function()
-                        scene:remove_node(instance)
-                        scene:set_selected_nodes(selection)
-                    end)
-                    
-                    scene:end_command()
-                    
-                    imgui.CloseCurrentPopup()
-                end
-            end
-            
-            if open then
-                table.sort(subclasses,
-                    function(a, b) return a.name < b.name end)
-                
-                table.insert(stack, "pop")
-                for i = #subclasses, 1, -1 do
-                    table.insert(stack, subclasses[i])
-                end
-            end
-
-            current_class = table.remove(stack)
-            while current_class == "pop" do
-                current_class = table.remove(stack)
-                imgui.TreePop()
-            end
-                
-        until not current_class
-        imgui.EndChild()
-        
-        
-        
-        imgui.Separator()
-        
-        if imgui.Button("Cancel", 120, 0) then
-            imgui.CloseCurrentPopup()
-        end
-        
-        imgui.EndPopup()
-    end
-end
-
--- Instance node prompt
-function Editor:open_instance_modal()
-    imgui.OpenPopup("Instance a scene")
-end
-
-function Editor:draw_instance_modal()
-    local popup_flags = {
-        "ImGuiWindowFlags_AlwaysAutoResize", 
-        "ImGuiWindowFlags_NoResize",
-        "ImGuiWindowFlags_NoMove"
-    }
-    if imgui.BeginPopupModal("Instance a scene", nil, popup_flags) then
-                
-        local scenes = get_scene_list()
-        imgui.BeginChild("Scene List", 400, 400)
-        for _,s in ipairs(scenes) do
-            if (imgui.Selectable(s, false, {"ImGuiSelectableFlags_AllowDoubleClick"})) then
-                if (imgui.IsMouseDoubleClicked(0)) then
-                
-                    
-                
-                    imgui.CloseCurrentPopup()
-                end
-            end
-        end
-        imgui.EndChild()
-        
-        
-        imgui.Separator()
-        
-        if imgui.Button("Cancel", 120, 0) then
-            imgui.CloseCurrentPopup()
-        end
-        
-        imgui.EndPopup()
-    end
-end
-
--- Tree View
-function Editor:draw_node_tree()
-    
-    local tree_flags = {"ImGuiWindowFlags_MenuBar"}
-    
-    if not self.show_window.node_tree then return end
-
-    local open_context = false
-    local open_node_list = false
-    local open_scene_list = false
-    
-    local open, window_open = imgui.Begin("Node Tree View", true, tree_flags)
-
-    self.show_window.node_tree = window_open
-    if open then
-    
-        if imgui.BeginMenuBar() then
-            if imgui.Button("Add Node") then
-                open_node_list = true
-            end
-            
-            if imgui.Button("Instance Scene") then
-                open_scene_list = true
-            end
-            
-            -- TODO: Move up/Move down/Delete buttons
-            imgui.EndMenuBar()            
-        end
-        
-        local model = self:get_active_scene()
-        local root = model:get_tree():get_root()
-        
-        if root then
-        
-            local selected_nodes = model:get_selected_nodes()
-            
-            -- Iterative Preorder Traversal
-            local stack = {}
-            local current_node = root
-            
-            repeat
-                local has_children = false
-                local children = current_node:get_children()
-                
-                for _,c in ipairs(children) do
-                    has_children = true
-                end
-                
-                -- Draw the tree node
-                local node_flags = 
-                    {"ImGuiTreeNodeFlags_OpenOnArrow", 
-                    "ImGuiTreeNodeFlags_SpanFullWidth",
-                    "ImGuiTreeNodeFlags_DefaultOpen"}
-                    
-                local is_selected = false
-                local should_open = false
-                for _,v in ipairs(selected_nodes) do
-                    if v == current_node then
-                        is_selected = true
-                    elseif current_node:is_parent_of(v) then
-                        should_open = true
-                    end
-                end
-                
-                if should_open then
-                    imgui.SetNextItemOpen(true)
-                end
-                
-                if is_selected then
-                    table.insert(node_flags, "ImGuiTreeNodeFlags_Selected")
-                end
-                
-                if not has_children then
-                    table.insert(node_flags, "ImGuiTreeNodeFlags_Leaf")
-                end
-                
-                local open = 
-                    imgui.TreeNodeEx(current_node:get_full_name(), node_flags)
-                
-                if imgui.IsItemHovered() then
-                
-                    -- Check that we're not clicking on the arrow
-                    local x, y = imgui.GetItemRectMin()
-                    local mx, my = imgui.GetMousePos()
-                    local spacing = imgui.GetTreeNodeToLabelSpacing()
-                    
-                    local m1 = imgui.IsMouseReleased(0)
-                    local m2 = imgui.IsMouseReleased(1)
-                    
-                    if (m1 or m2) 
-                        and (not has_children or (mx - x > spacing)) then
-                        
-                        model:set_selected_nodes({current_node})
-                        
-                    end
-                    
-                    if m2 then
-                        open_context = true
-                    end
-
-                end
-                
-                if open then
-                    table.insert(stack, "pop")
-                    for i = #children, 1, -1 do
-                        table.insert(stack, children[i])
-                    end
-                    
-                end
-                
-                current_node = table.remove(stack)
-                
-                while current_node == "pop" do
-                    current_node = table.remove(stack)
-                    imgui.TreePop()
-                end
-                
-            until not current_node
-        
-        else
-            imgui.Text("No Root Node")
-        end
-        
-    end
-    
-    if open_context then
-        imgui.OpenPopup("ContextMenu")
-    end
-    
-    if imgui.BeginPopup("ContextMenu") then
-        imgui.EndPopup()
-    end
-    
-    if open_node_list then
-        self:open_node_list_modal()
-    end
-    
-    if open_scene_list then
-        self:open_instance_modal()
-    end
-    
-    self:draw_node_list_modal()
-    self:draw_instance_modal()
-    
-    imgui.End()
-
-end
-
--- Node Inspector
-function Editor:_draw_property_widget(node, ep)
-    local ptype = ep.type
-    local name = ep.name
-    local filter = ep.filter
-    local editor_hints = ep.editor_hints
-    local display_name = editor_hints.display_name or name
-    
-    local getter = ("get_%s"):format(name)
-    local setter = ("set_%s"):format(name)
-        
-    local val = node[getter](node)
-    local new_val
-    local changed = false
-    
-    imgui.AlignTextToFramePadding()
-    imgui.Text(display_name)
-    imgui.NextColumn()
-    imgui.PushID(name)
-    
-    if ptype == "string" then
-        changed, new_val = imgui.InputText("##StringInput", val, 64)
-    elseif ptype == "float" then
-        local velo, smin, smax = 
-            editor_hints.speed, editor_hints.min, editor_hints.max
-        velo = velo or 0.01
-        smin = smin or 0
-        smax = smax or 100
-        
-        changed, new_val = imgui.DragFloat("##FloatSlider", val, velo, smin, smax)
-    
-    elseif ptype == "vec2" then
-        local velo, smin, smax = 
-            editor_hints.speed, editor_hints.min, editor_hints.max
-        velo = velo or 1
-        smin = smin or 0
-        smax = smax or 100
-            
-        local c, nx, ny = imgui.DragInt2("##Vec2Slider", val.x, val.y, velo, smin, smax)
-        new_val = vec2(nx, ny)            
-        changed = c
-    elseif ptype == "bool" then
-        changed, new_val = imgui.Checkbox("##Checkbox", val)
-    elseif ptype == "resource" then
-        if imgui.Button("Select") then
-            imgui.OpenPopup("Resource Selector")
-        end
-        
-        imgui.SameLine()
-        imgui.Text("Path:")
-        imgui.SameLine()
-        
-        if val then
-            imgui.Text(val:get_filepath())
-        else
-            imgui.Text("No Resource")
-        end
-
-        if editor_hints.resource_type == "Texture" then
-            if val then
-                love.graphics.push("all")
-                love.graphics.setCanvas(self.resource_preview_canvas)
-                love.graphics.clear(0,0,0,0)                
-                scaledraw.draw( val:get_data(), "aspect", 0, 0, self.resource_preview_canvas:getDimensions() )
-                love.graphics.setCanvas()
-                
-                imgui.Image(self.resource_preview_canvas, 128, 128) 
-                
-                love.graphics.pop()
-            end
-        end
-        
-        local popup_flags = {
-            "ImGuiWindowFlags_AlwaysAutoResize", 
-            "ImGuiWindowFlags_NoResize",
-            "ImGuiWindowFlags_NoMove"
-        }
-        
-        if imgui.BeginPopupModal("Resource Selector", nil, popup_flags) then
-            
-            local resources = get_resource_list()
-            imgui.BeginChild("Resource List", 400, 400)
-            for _,s in ipairs(resources) do
-                if (imgui.Selectable(s, false, {"ImGuiSelectableFlags_AllowDoubleClick"})) then
-                    if (imgui.IsMouseDoubleClicked(0)) then
-                        
-                        local res = resource.get_resource(s)
-                        
-                        if res then
-                        
-                            new_val = res
-                            changed = true
-                        
-                        end
-                        
-                        imgui.CloseCurrentPopup()
-                    end
-                end
-            end
-            imgui.EndChild()
-            
-            imgui.Separator()
-            if imgui.Button("Cancel", 120, 0) then
-                imgui.CloseCurrentPopup()
-            end
-            imgui.EndPopup()
-        end
-        
-        
-    end
-        
-    imgui.PopID()
-    imgui.NextColumn()
-    
-    if changed and filter(new_val) then
-        local scene = self:get_active_scene()
-        scene:start_command(("Edit%s"):format(name), false)
-        scene:add_do_function(function() 
-            node[setter](node, new_val)
-        end)
-        
-        scene:add_undo_function(function()
-            node[setter](node, val)
-        end)
-
-        scene:end_command()
-    end
-end
-
-function Editor:draw_node_inspector()
-    local inspector_flags = {}
-    
-    if not self.show_window.inspector then return end
-    
-    local open, window_open = imgui.Begin("Node Inspector", true, inspector_flags)
-    self.show_window.inspector = window_open
-    
-    if open then
-        local model = self:get_active_scene()
-        local target = model:get_selected_nodes()[1]
-        if target then
-            imgui.Text("Path:")
-            imgui.SameLine()
-            imgui.Text(target:get_absolute_path())
-            
-            imgui.Columns(2)
-            
-            local class = target.class
-            while class do
-                local static = rawget(class, "static")
-                if static then
-                    local exported = rawget(static, "exported_vars")
-                    if exported then
-                        imgui.Separator()
-                        for _, ep in ipairs(exported) do
-                            self:_draw_property_widget(target, ep)
-                        end
-                    end
-                end
-                class = class.super
-            end
-            
-            imgui.Columns(1)
-            
-        else
-            imgui.Text("No Node Selected")
-        end
-    end
-    
-    imgui.End()
-    
-end
-
-
--- Signal Inspector
-
-function Editor:do_actions()
-    -- Handle shortcut/menubar actions
-    if self.actions_to_do.undo then
-        self:get_active_scene():undo()
-    end
-    
-    if self.actions_to_do.redo then
-        self:get_active_scene():redo()
-    end
-
-    if self.actions_to_do.new then
-        self:add_new_scene()
-    end
-    
-    if self.actions_to_do.save then
-        self:save_scene()
-    end
-    
-    if self.actions_to_do.saveas then
-        self:open_save_as_modal()
-    end
-    
-    if self.actions_to_do.open then
-        self:open_open_scene_modal()
-    end
-    
-    if self.actions_to_do.close then
-        self:close_scene(self.active_scene)
-    end
-
-    if self.actions_to_do.show_node_tree then
-        self.show_window.node_tree = not self.show_window.node_tree
-    end
-    
-    if self.actions_to_do.show_inspector then
-        self.show_window.inspector = not self.show_window.inspector
-    end
-    
-
-    self.actions_to_do = {}
 end
 
 -- Callbacks --

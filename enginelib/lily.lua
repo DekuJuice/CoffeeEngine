@@ -32,7 +32,7 @@ assert(love.thread, "Lily requires love.thread. Enable it in conf.lua or require
 
 local modulePath = select(1, ...):match("(.-)[^%.]+$")
 local lily = {
-	_VERSION = "3.0.6",
+	_VERSION = "3.0.7mod",
 	-- Loaded modules
 	modules = {},
 	-- List of threads
@@ -761,7 +761,11 @@ if love.filesystem then
 		return assert(love.filesystem.append(t[1], t[2], t[3]))
 	end)
 	lilyHandlerFunc("newFileData", 1, function(t)
-		return assert(love.filesystem.newFileData(t[1], t[2], t[3]))
+        if t[2] or t[3] then
+            return assert(love.filesystem.newFileData(t[1], t[2], t[3]))
+        else
+            return assert(love.filesystem.newFileData(t[1]))
+        end
 	end)
 	lilyHandlerFunc("read", 1, function(t)
 		return assert(love.filesystem.read(t[1], t[2]))
@@ -779,7 +783,7 @@ end
 
 if hasGraphics then
 	lilyHandlerFunc("newFont", 1, function(t)
-		return love.font.newRasterizer(t[1], t[2])
+		return love.font.newRasterizer(t[1], t[2], t[3], t[4])
 	end)
 	lilyHandlerFunc("newImage", 1, function(t)
 		local s, x = pcall(love.image.newImageData, t[1])

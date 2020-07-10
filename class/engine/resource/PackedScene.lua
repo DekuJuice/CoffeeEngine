@@ -3,10 +3,7 @@
 local binser = require("enginelib.binser")
 local Resource = require("class.engine.resource.Resource")
 local PackedScene = Resource:subclass("PackedScene")
-
-function PackedScene:initialize()
-    Resource.initialize(self)
-end
+PackedScene:export_var("data", "data")
 
 function PackedScene:instance()
     
@@ -70,7 +67,6 @@ function PackedScene:pack(root)
     }
     
     self.data = binser.serialize(scene)
-    
 end
 
 return PackedScene

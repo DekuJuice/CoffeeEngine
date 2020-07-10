@@ -1,4 +1,6 @@
-io.stdout:setvbuf("no") -- Buffered output can act oddly on Windows, we disable it
+io.stdout:setvbuf("no") -- Buffered output can act oddly on Windows
+
+-- CONSTANTS --
 _G.EDITOR_MODE = false
 _G.DEBUG = false
 
@@ -7,15 +9,22 @@ local STEP = 1 / 60
 local MAX_ACCUM = FRAME_TIME * 5
 local MAX_LOOP = 500
 
+-- LOCAL FUNCTIONS --
 local function get_imgui_dt()
     return FRAME_TIME
 end
 
+-- LIBRARIES
 local input = require("input")
 local lily
 
+require("enginelib.strong") -- Extensions to string library, registers itself into string global
+require("enginelib.tableutil") -- Extensions to table library
+utf8 = require("utf8") -- utf8 lib not loaded by default
+
+-- MISC SETUP --
 do -- Register custom (non-class) types to binser
-   -- Classes have their registration handled by the Node class
+   -- Classes have their registration handled by the Object class
     local binser = require("enginelib.binser")
     
     -- Unfortunately, we can't retrieve type information from a cdata struct, and
@@ -37,6 +46,7 @@ do -- Register custom (non-class) types to binser
     
 end
 
+-- CALLBACKS --
 function love.run()
     love.math.setRandomSeed(os.time())
     love.load(love.arg.parseGameArguments(arg), arg)
@@ -125,7 +135,7 @@ function love.load(args, unfiltered_args)
     window_settings.minheight = 360
     window_settings.fullscreen = false
     window_settings.fullscreentype = "desktop"
-    window_settings.vsync = 1
+    window_settings.vsync = 0
     window_settings.msaa = 0
     window_settings.depth = nil
     window_settings.stencil = nil
@@ -173,11 +183,19 @@ function love.load(args, unfiltered_args)
         -- Font loading needs to be done before Init as that's when the
         -- font atlas is built
         imgui.AddFontFromFileTTF("engineres/Vera.ttf", 18)
+        imgui.AddFontFromFileTTF("engineres/Feather.ttf", 16, true, {0xf100, 0xf21d, 0})
+        
+        _G.IconFont = require("engineres/IconFontConstants")
+        for k,v in pairs(IconFont) do
+            IconFont[k] = utf8.char(v)
+        end
         
         imgui.Init()
         imgui.SetReturnValueLast(false)
-        imgui.PushStyleVar("WindowRounding", 0)
-        imgui.PushStyleVar("WindowBorderSize", 1)
+        imgui.PushStyleVar("ImGuiStyleVar_WindowRounding", 3)
+        imgui.PushStyleVar("ImGuiStyleVar_FrameRounding", 3)
+        imgui.PushStyleVar("ImGuiStyleVar_WindowBorderSize", 1)
+        imgui.PushStyleVar("ImGuiStyleVar_FrameBorderSize", 1)
         -- TMP dir for writing scene files
         love.filesystem.createDirectory("/tmp")
         
@@ -188,31 +206,11 @@ function love.load(args, unfiltered_args)
     
     -- Initialize lily, needs to be done after love modules are loaded
     lily = require("enginelib.lily")
-    
-    -- Load all assets at once for now, replace this if loading times/memory usage becomes too high
-    local resource = require("resource")
-    resource.load("assets")
-    
-    -- Require all classes, we aren't using most of them now but we need to do this to have them
-    -- show up in the editor    
-    do
-        local stack = {}
-        table.insert(stack, "class")
-        while (#stack > 0) do
-            local dir = table.remove(stack)
-            for _,v in ipairs(love.filesystem.getDirectoryItems(dir)) do
-                local path = dir .. "/" .. v
-                local info = love.filesystem.getInfo(path)
-                if info.type == "directory" then
-                    table.insert(stack, path)
-                else
-                    require(path:match("^[^%.]+"):gsub("/", "."))
-                end
-            end
-        end
-        
-    end
 
+    -- Init resource manager, this registers some global functions for 
+    -- managing resources
+    require("res")
+    
     local SceneTree = require("class.engine.SceneTree")
     
     main = SceneTree()
@@ -237,7 +235,7 @@ function love.load(args, unfiltered_args)
     ]]--
     
     -- Catch stray globals
-    --setmetatable(_G, {__newindex = function(self,k,v) error(("Stray global declared '%s'"):format(k)) end})
+    setmetatable(_G, {__newindex = function(self,k,v) error(("Stray global declared '%s'"):format(k)) end})
 end
 
 function love.update(dt)
@@ -338,7 +336,6 @@ function love.textinput(text)
 end
 
 function love.wheelmoved(dx, dy)
-    
     if imgui then
         imgui.WheelMoved(dy)
         if imgui.GetWantCaptureMouse() then return end

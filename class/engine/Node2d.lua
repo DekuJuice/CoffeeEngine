@@ -7,7 +7,7 @@ local vec2 = require("enginelib.vec2")
 local Node = require("class.engine.Node")
 local Node2d = Node:subclass("Node2d")
 
-Node2d:export_var("position", "vec2", nil, {speed = 1, min = -math.huge, max = math.huge} )
+Node2d:export_var("position", "vec2", nil, {speed = 1} )
 
 function Node2d:initialize()
     Node.initialize(self)
@@ -15,11 +15,15 @@ function Node2d:initialize()
     self.position = vec2(0, 0)
     self.global_position = vec2(0, 0)
     
-    self.position_dirty = false
+    self.position_dirty = true
 end
 
 function Node2d:_update_global_position()
     local parent = self:get_parent()
+    while parent and not parent:isInstanceOf(Node2d) do
+        parent = parent:get_parent()
+    end
+    
     self.position_dirty = false
 
     if not parent then
@@ -34,8 +38,29 @@ end
 function Node2d:flag_as_dirty()
     if self.position_dirty then return end
     self.position_dirty = true
+    
+    -- Need to traverse all children since they may not be node2ds
+    
+    local stack = {}
+    local children = {}
+    
     for _,c in ipairs(self.children) do
-        c:flag_as_dirty()
+        if c:isInstanceOf(Node2d) then
+            c:flag_as_dirty()
+        else
+            table.insert(stack, c)
+        end
+    end
+    
+    while #stack > 0 do
+        local top = table.remove(stack)
+        for _,c in ipairs(top.children) do
+            if c:isInstanceOf(Node2d) then
+                c:flag_as_dirty()
+            else
+                table.insert(stack, c)
+            end
+        end
     end
 end
 

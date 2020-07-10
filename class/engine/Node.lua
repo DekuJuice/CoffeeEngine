@@ -1,105 +1,28 @@
 -- Base class for all Nodes
 
-local binser = require("enginelib.binser")
-local tableutil = require("enginelib.tableutil")
-
 local Object = require("class.engine.Object")
 local Node = Object:subclass("Node")
 
 -- Only used in editor, indicates that the current node was instanced from a scene file,
 -- and therefore should not expose any built in subnodes
 Node:define_get_set("editor_hint_is_instance") 
-
 -- If node was instanced, the scene root will have its filename set to the file it was instanced from
 Node:define_get_set("filename")
 
-local function validate_node_name(name)
+Node:export_var("name", "string", {filter = function(name) 
     if name:len() == 0 then return false end
     for _, char in ipairs({ -- Invalid characters
         "/",
-        "%."
+        ".",
+        ":",
+        "%"
     }) do
-        if name:find(char) then
+        if name:find(char, nil, true) then
             return false
         end
     end
     return true
-end
-
-local function _no_filter(var)
-    return true
-end
-
--- Exports a member of the class, including it in a list of variables to show in the editor,
--- and defining standard setget functions for it
--- filter specifies a filter function on entered data to validate it
--- Editor hints are hints to how the editing widget should be displayed, ie names of fields in vectors, 
--- min/max ranges, etc
--- These vary depending on the datatype, check NodeInspector for more details
-Node.static.export_var = function(class, name, datatype, filter, editor_hints)
-    
-    assert(name ~= nil, "A name must be given!")
-    assert(datatype ~= nil, "A datatype must be specified!")
-    
-    class.static.exported_vars = rawget(class.static, "exported_vars") or {} -- Create export table if it does not exist
-
-    -- Make sure getsets exist for this var, even if none are manually defined
-    class:define_get_set(name)
-    
-    table.insert(class.static.exported_vars, 
-        {type = datatype, 
-        name = name, 
-        filter = filter or _no_filter,
-        editor_hints = editor_hints or {}})
-end
-
-Node:export_var("name", "string", validate_node_name)
-
--- serialization saves all exported variables into a key-value table
-function Node:_serialize()
-    local res = {}
-    local cur_class = self.class
-    while (cur_class) do
-        local static = rawget(cur_class, "static")
-        if static then
-            local exported = rawget(static, "exported_vars")
-            
-            if exported then
-                for _, ep in ipairs(exported) do
-                    local getter = ("get_%s"):format(ep.name)
-                    res[ep.name] = self[getter](self)
-                end
-            end
-        end        
-        
-        if cur_class == Node then
-            break
-        end
-        
-        cur_class = cur_class.super
-    end
-    return res
-end
-
--- Since each class has its own metatable, so we need to define deserialize for each class
-local function binser_register(class)
-    class._deserialize = function(data) 
-        local instance = class()
-        for k,v in pairs(data) do
-            local setter = ("set_%s"):format(k)
-            instance[setter](instance, v)
-        end
-        return instance
-    end
-
-    binser.registerClass(class)
-end
-
-binser_register(Node)
-
-Node.static.subclassed = function(class, other)
-    binser_register(other)
-end
+end})
 
 function Node:initialize()
     Object.initialize(self)
@@ -198,7 +121,7 @@ function Node:get_child_count()
 end
 
 function Node:get_children()
-    return tableutil.copy(self.children)
+    return table.copy(self.children)
 end
 
 function Node:get_child(i)
