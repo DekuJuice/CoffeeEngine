@@ -1,8 +1,8 @@
 -- Base class for all objects
 -- Includes a signal/slot system
 local binser = require("enginelib.binser")
-local class = require("enginelib.middleclass")
-local Object = class("Object")
+local middleclass = require("enginelib.middleclass")
+local Object = middleclass("Object")
 
 -- Create generic getters/setters for the given property
 Object.static.define_get_set = function(class, name)
@@ -38,6 +38,38 @@ Object.static.export_var = function(class, name, datatype, editor_hints)
         editor_hints = editor_hints or {}})
 end
 
+Object.static.get_exported_vars = function(class)
+    local evars = {}
+    while class do
+        local static = rawget(class, "static")
+        if static then
+            local exported = rawget(static, "exported_vars")
+            if exported then
+                for _,ep in ipairs(exported) do
+                    evars[ep.name] = ep
+                end             
+            end
+        end
+        class = class.super
+    end
+    return evars
+end
+
+Object.static.binser_register = function(class)
+    if not class._deserialize then
+        class.static._deserialize = function(data)
+            local instance = class()
+            for k,v in pairs(data) do
+                local setter = ("set_%s"):format(k)
+                instance[setter](instance, v)
+            end
+            return instance
+        end
+    end
+    
+    binser.register(class.__instanceDict, class.name, class._serialize, class._deserialize)
+end
+
 -- serialization saves all exported variables into a key-value table
 function Object:_serialize()
     local res = {}
@@ -58,21 +90,6 @@ function Object:_serialize()
         cur_class = cur_class.super
     end
     return res
-end
-
-Object.static._deserialize = function(class, res)
-    local instance = class()
-    for k,v in pairs(res) do
-        local setter = ("set_%s"):format(k)
-        instance[setter](instance, v)
-    end
-    
-    return instance
-end
-
--- Serialization uses metatables to determine type, so we need to register all subclasses as well
-Object.static.subclassed = function(class, other)
-    binser.registerClass(other)
 end
 
 function Object:initialize()

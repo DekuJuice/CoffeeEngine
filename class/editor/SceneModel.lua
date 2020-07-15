@@ -2,12 +2,120 @@ local PackedScene = require("class.engine.resource.PackedScene")
 local SceneTree = require("class.engine.SceneTree")
 local Object = require("class.engine.Object")
 
+local Command = Object:subclass("UndoRedoCommand")
+local _nil_placehold = {}
+
+function Command:initialize(name, merge_mode)
+    Object.initialize(self)
+    self.name = name or ""
+    self.do_funcs = {}
+    self.undo_funcs = {}
+    
+    self.do_vars = {}
+    self.undo_vars = {}
+    self.merge_mode = merge_mode
+end
+
+function Command:merge_with(other)
+
+    if self.merge_mode == "merge_all" then
+        -- Combine functions and values
+        for _,f in ipairs(other.do_funcs) do
+            table.insert(self.do_funcs, f)
+        end
+        
+        for _,f in ipairs(other.undo_funcs) do
+            table.insert(self.undo_funcs, f)
+        end
+        
+        for obj, vals in pairs(other.do_vars) do
+            if self.do_vals[obj] then
+                for k,v in pairs(vals) do
+                    self.do_vals[obj][k] = v
+                end
+            else
+                self.do_vals[obj] = vals
+            end
+        end
+        
+        for obj, vals in pairs(other.undo_vars) do
+            if self.do_vals[obj] then
+                for k,v in pairs(vals) do
+                    self.undo_vals[obj][k] = v
+                end
+            else
+                self.undo_vals[obj] = vals
+            end
+        end
+    -- Use the oldest command's undo, and the newest's redo. Useful for things like merging incremental changes
+    elseif self.merge_mode == "merge_ends" then  
+        self.do_funcs = other.do_funcs
+        self.do_vars = other.do_vars        
+    end
+    
+    self.merge_mode = other.merge_mode
+
+end
+
+function Command:add_do_func(func)
+    table.insert(self.do_funcs, func)
+end
+
+function Command:add_undo_func(func)
+    table.insert(self.undo_funcs, func)
+end
+
+function Command:add_do_var(object, var, value)
+    if not self.do_vars[object] then
+        self.do_vars[object] = {}
+    end
+    
+    if value == nil then value = _nil_placehold end
+    self.do_vars[object][var] = value
+end
+
+function Command:add_undo_var(object, var, value)
+    if not self.undo_vars[object] then
+        self.undo_vars[object] = {}
+    end
+    
+    if value == nil then value = _nil_placehold end
+    self.undo_vars[object][var] = value
+end
+
+function Command:do_command()
+    for _,f in ipairs(self.do_funcs) do
+        f()
+    end
+    
+    for obj, vars in pairs(self.do_vars) do
+        for k,v in pairs(vars) do
+            local setter = ("set_%s"):format(k)
+            if v == _nil_placehold then v = nil end
+            obj[setter](obj, v)
+        end
+    end
+end
+
+function Command:undo_command()
+    for _,f in ipairs(self.undo_funcs) do
+        f()
+    end
+    
+    for obj, vars in pairs(self.undo_vars) do
+        for k,v in pairs(vars) do
+            local setter = ("set_%s"):format(k)
+            if v == _nil_placehold then v = nil end
+            obj[setter](obj, v)
+        end
+    end
+    
+end
+
 local SceneModel = Object:subclass("SceneModel")
 SceneModel:define_get_set("modified")
-SceneModel:define_get_set("grid_minor_w")
-SceneModel:define_get_set("grid_minor_h")
-SceneModel:define_get_set("grid_major_w")
-SceneModel:define_get_set("grid_major_h")
+SceneModel:define_get_set("grid_minor")
+SceneModel:define_get_set("grid_major")
 SceneModel:define_get_set("draw_grid")
 
 local function get_filename(path)
@@ -22,7 +130,6 @@ function SceneModel:initialize(loadpath)
     Object.initialize(self)
     
     -- Undo/redo
-    self.in_command = false
     self.undo_stack = {}
     self.redo_stack = {}
 
@@ -30,10 +137,8 @@ function SceneModel:initialize(loadpath)
     
     -- Grid config
     self.draw_grid = true
-    self.grid_minor_w = 16
-    self.grid_minor_h = 16
-    self.grid_major_w = 416
-    self.grid_major_h = 240
+    self.grid_minor = vec2(16, 16)
+    self.grid_major = vec2(416, 240)
     
     self.tree = SceneTree()
     
@@ -93,13 +198,16 @@ end
 function SceneModel:add_node(path, node)
     local root = self:get_tree():get_root()
     if root then
-        local parent = root:get_node(path)
-        assert(parent, "Invalid path " .. path)
+        
+        local parent = root
+        if path then
+            parent = root:get_node(path)
+            assert(parent, "Invalid path " .. path)
+        end
         
         parent:add_child(node)
         
     else
-        assert(path == "/", "Invalid path " .. path)
         self:get_tree():set_root(node)        
     end
 end
@@ -108,7 +216,6 @@ function SceneModel:remove_node(instance)
     assert(instance:get_tree() == self:get_tree(), "Invalid instance")
     if instance:get_parent() then
         instance:get_parent():remove_child(instance)
-        
     else
         -- No parent, must be root node
         self:get_tree():set_root(nil)
@@ -116,89 +223,46 @@ function SceneModel:remove_node(instance)
 
 end
 
-function SceneModel:undo()
-    local command = self.undo_stack[#self.undo_stack]
+function SceneModel:undo()    
+    local command = table.remove(self.undo_stack)
     if not command then return end
     
-    table.remove(self.undo_stack)
-    
-    for _,f in ipairs(command.undo_funcs) do
-        f()
-    end
-    
+    command:undo_command()
+
     table.insert(self.redo_stack, command)
     
 end
 
 function SceneModel:redo()
 
-    local command = self.redo_stack[#self.redo_stack]
+    local command = table.remove(self.redo_stack)
     if not command then return end
-    
-    table.remove(self.redo_stack)
-    
-    for _,f in ipairs(command.do_funcs) do
-        f()
-    end
+
+    command:do_command()
     
     table.insert(self.undo_stack, command)
     
 end
 
-function SceneModel:start_command(name, merge)
-    assert(not self.in_command, "Finish the command before starting another")
-    self.in_command = true
-    self.do_merge = merge
-    self.command = {
-        name = name,
-        do_funcs = {},
-        undo_funcs = {}
-    }
+function SceneModel:create_command(name, merge_mode)
+    return Command(name, merge_mode)
 end
 
-function SceneModel:add_do_function(func)
-    assert(self.in_command, "Call start_command before adding functions")
-    table.insert(self.command.do_funcs, func)
+function SceneModel:commit_command(cmd)
+    self.redo_stack = {}
+    local top = self.undo_stack[#self.undo_stack]
     
-end
+    cmd:do_command()
+    if top and top.merge_mode then
 
-function SceneModel:add_undo_function(func)
-    assert(self.in_command, "Call start_command before adding functions")
-    table.insert(self.command.undo_funcs, func)
-end
-
-function SceneModel:end_command()
-    self.in_command = false
-    -- Execute functions
-    for _,f in ipairs(self.command.do_funcs) do
-        f()
-    end
-
-    -- Merge if applicable
-    if self.do_merge then
-        local prev = self.undo_stack[#self.undo_stack]
-        if prev then
-            if prev.name == self.command.name then
-                for _,f in ipairs(self.command.do_funcs) do
-                    table.insert(prev.do_funcs, f)
-                end
-                
-                for _,f in ipairs(self.command.undo_funcs) do
-                    table.insert(prev.undo_funcs, f)
-                end
-                                
-                self.redo_stack = {}
-                
-                return
-            end
+        if top.name == cmd.name then
+            top:merge_with(cmd)
+            return
         end
     end
     
-    -- Update undo/redo stack
-    table.insert(self.undo_stack, self.command)
-    self.command = nil
-    self.redo_stack = {}
-    
+    table.insert(self.undo_stack, cmd)
 end
+
 
 return SceneModel

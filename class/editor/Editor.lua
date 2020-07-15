@@ -1,6 +1,6 @@
 local log = require("enginelib.log")
 local lily = require("enginelib.lily")
-local vec2 = require("enginelib.vec2")
+
 local scaledraw = require("enginelib.scaledraw")
 
 local Texture = require("class.engine.resource.Texture")
@@ -8,49 +8,25 @@ local Node = require("class.engine.Node")
 local Node2d = require("class.engine.Node2d")
 
 local SceneModel = require("class.editor.SceneModel")
+local ActionDispatcher = require("class.editor.ActionDispatcher")
 
-local ImguiResourceSelector = require("class.editor.ImguiResourceSelector")
-local ImguiNodeSelector = require("class.editor.ImguiNodeSelector")
-local ImguiResourceInspector = require("class.editor.ImguiResourceInspector")
+local ResourceInspector = require("class.editor.ResourceInspector")
+local ResourceTreeView = require("class.editor.ResourceTreeView")
+local ResourceSelector = require("class.editor.ResourceSelector")
+local NodeTreeView = require("class.editor.NodeTreeView")
+local NodeInspector = require("class.editor.NodeInspector")
+local Console = require("class.editor.Console")
 
 local Editor = Node:subclass("Editor")
 Editor.static.dontlist = true
+
+local console_output = {}
+local console = Console()
 
 local MIN_ZOOM = 0.5
 local MAX_ZOOM = 8.0
 local LOG_MIN_ZOOM = math.log(MIN_ZOOM)
 local LOG_MAX_ZOOM = math.log(MAX_ZOOM)
-
-local MENU_DEF = {
-    {name = "File", items = {
-        {name = "New", action = "new"},
-        {name = "Save", action = "save"},
-        {name = "Save As", action = "saveas"},
-        {name = "Open", action = "open"},
-        {name = "Close", action = "close"},
-    }},
-    {name = "Edit", items = {
-        {name = "Undo", action ="undo"},
-        {name = "Redo", action ="redo"},
-        {name = "Copy", action ="copy"},
-        {name = "Paste", action ="paste"},
-    }},
-    {name = "View", items = {
-        {name = "Node Tree", action="show_node_tree"},
-        {name = "Inspector", action="show_inspector"},
-        {name = "Signals", action="show_signals"}
-    }}
-}
-
-local SHORTCUTS = {
-    ["Ctrl+z"]="undo",
-    ["Ctrl+y"]="redo",
-    ["Ctrl+s"]="save",
-    ["Ctrl+Shift+s"]="saveas",
-    ["Ctrl+w"]="close",
-    ["Ctrl+o"]="open",
-    ["Ctrl+n"]="new"
-}
 
 -- f(x) = e^(a + bx)
 -- a = log_min_zoom
@@ -64,105 +40,175 @@ local function get_log_scale(scale)
     return (math.log(scale) - LOG_MIN_ZOOM) / (LOG_MAX_ZOOM - LOG_MIN_ZOOM)
 end
 
-local function draw_grid(ox, oy, w, h, cellw, cellh)
+local function draw_grid(origin, rect, grid_size)
+    local w, h = rect:unpack()
+    local ox, oy = origin:unpack()
+    local cellw, cellh = grid_size:unpack()
+    
     for x = 0, w, cellw do
         love.graphics.line(x + ox, 0, x + ox, h)
     end
-    
+
     for y = 0, h, cellh do
         love.graphics.line(0, y + oy, w, y + oy)
     end
 end
-
-local function create_file_tree(path)
-    local root = TreeData(path)
-    local stack = {path}
-    local data_stack = {root}
-    
-    while (#stack > 0) do
-        local top = table.remove(stack)
-        local node = table.remove(data_stack)
-        for _,v in ipairs(love.filesystem.getDirectoryItems(top)) do
-            local p = top .. "/" .. v
-            local info = love.filesystem.getInfo(p) 
-            if info.type == "directory" then                
-                table.insert(stack, p)
-                local child = TreeData(v)
-                node:add_child(child)
-                table.insert(data_stack, child)
-            elseif info.type == "file" then
-                node:add_child(TreeData(v, p))
-            end
-        end
-    end
-    
-    return root
-end
-
 
 -- The first time the editor is loaded, we require every class, so that we can
 -- traverse the parent classes to find subclasses. This is useful for listing them in
 -- the editor
 do
 
-local function preload_class(dir)
-    for _,v in ipairs(love.filesystem.getDirectoryItems(dir)) do
-        local path = dir .. "/" .. v
-        local info = love.filesystem.getInfo(path)
-        if info.type == "directory" then
-            preload_class(path)
-        else
-            require(path:match("^[^%.]+"):gsub("/", "."))
+    local function preload_class(dir)
+        for _,v in ipairs(love.filesystem.getDirectoryItems(dir)) do
+            local path = dir .. "/" .. v
+            local info = love.filesystem.getInfo(path)
+            if info.type == "directory" then
+                preload_class(path)
+            else
+                require(path:match("^[^%.]+"):gsub("/", "."))
+            end
         end
     end
+
+    preload_class("class/engine")
+
+
+-- Also override print so we can display console output ingame
+    local old_print = print
+    print = function(...) 
+        old_print(...)
+
+        local str = table.pack(...)
+        for i = 1, str.n do
+            str[i] = tostring(str[i])
+        end
+
+        table.insert(console_output, table.concat(str, " "))
+    end
+
 end
 
-preload_class("class/engine")
+function Editor:draw_grid(position, scale, cellsize)
+    local vw, vh = self:get_active_view():get_resolution()
+    if vw <= 0 or vh <= 0 then return end
+    
+    love.graphics.push("all")
+    cellsize =  cellsize * scale
+
+    love.graphics.translate(self.view_pos:unpack())
+    love.graphics.translate(0.5, 0.5)
+    love.graphics.setLineStyle("rough")
+    
+    local origin = -(cellsize + position)
+    origin.x = origin.x % cellsize.x
+    origin.y = origin.y % cellsize.y
+    
+    for x = 0, vw, cellsize.x do
+        love.graphics.line(x + origin.x, 0, x + origin.x, vh)
+    end
+
+    for y = 0, vh, cellsize.y do
+        love.graphics.line(0, y + origin.y, vw, y + origin.y)
+    end
+
+
+    love.graphics.pop()
 
 end
 
 function Editor:initialize()
-    
+
     Node.initialize(self, "Editor")
-    
+
     self.scene_models = {}
     self.scene_views = {}
-    
+
     self.active_scene = 1
-    
-    self.dragging = false
-    self.view_y = 0
-    self.actions_to_do = {}
-    
-    self.selected_resources = {}
-    self.inspected_resource = nil
-    
-    -- Add other components of the editor
-    self.resource_browser = ImguiResourceSelector()
-    self.resource_browser:set_window_name("Resources")
-    self.resource_browser:set_modal(false)    
-    
-    self.node_browser = ImguiNodeSelector()
-    self.node_browser:set_window_name("Nodes")
-    self.node_browser:set_modal(false)
-    
-    self.resource_inspector = ImguiResourceInspector()
-    self.resource_inspector:set_window_name("Inspector")
-    
-    
-    self.show_resource_inspector = true -- whether to show resource inspector or node inspector
-    
-    
-    --self:add_child(require("class.editor.Node2dPlugin")())
-    --self:add_child(require("class.editor.TileMapPlugin")())
-
     self:add_new_scene() -- Make sure there is always at least one scene open
-end
 
-function Editor:_get_shortcut_for(action)
-    for s,a in pairs(SHORTCUTS) do
-        if a == action then return s end
-    end
+    self.dragging = false
+    self.view_pos = vec2()
+    self.action_dispatcher = ActionDispatcher()
+
+
+    -- Add other components of the editor
+    self.resource_tree_view = ResourceTreeView()
+    self.resource_tree_view:set_window_name("Resources")
+    self.resource_tree_view:set_modal(false)    
+    self.resource_tree_view_selection = {}
+
+    self.resource_selector = ResourceSelector()
+    self.resource_selector:set_window_name("Choose a resource type")
+    self.resource_selector_selection = {}
+
+    self.node_tree_view = NodeTreeView()
+    self.node_tree_view:set_window_name("Nodes")
+    self.node_tree_view:set_modal(false)
+
+    self.resource_inspector = ResourceInspector()
+    self.resource_inspector:set_window_name("Inspector")
+    self.inspected_resource = nil
+
+    self.node_inspector = NodeInspector()
+    self.node_inspector:set_window_name("Inspector")
+
+    self.show_resource_inspector = true -- whether to show resource inspector or node inspector
+    self.show_inspector = true
+
+    -- Add actions
+    self.action_dispatcher:add_action("Save", function() 
+            self:save_scene()
+        end, "ctrl+s")
+
+    self.action_dispatcher:add_action("Save As", function()
+            -- Open saveas modal
+        end, "ctrl+shift+s")
+
+    self.action_dispatcher:add_action("New Scene", function()
+            self:add_new_scene()
+        end, "ctrl+n")
+
+    self.action_dispatcher:add_action("Open Scene", function()
+        end, "ctrl+o")
+
+    self.action_dispatcher:add_action("Close Scene", function()
+            self:close_scene(self.active_scene)
+        end, "ctrl+w")
+
+    self.action_dispatcher:add_action("Undo", function()
+            self:get_active_scene():undo()
+        end, "ctrl+z")
+
+    self.action_dispatcher:add_action("Redo", function()
+            self:get_active_scene():redo()
+        end, "ctrl+y")
+
+    self.action_dispatcher:add_action("Toggle Grid", function()
+            local scene = self:get_active_scene()
+            scene:set_draw_grid( not scene:get_draw_grid() )
+        end, "ctrl+g")
+
+    self.action_dispatcher:add_action("Recenter View", function()
+            self:get_active_view():set_position(vec2(0, 0))
+        end, "ctrl+shift+f")
+
+    self.action_dispatcher:add_action("Show Inspector", function()
+            self.show_inspector = not self.show_inspector
+        end, "ctrl+shift+i")
+
+    self.action_dispatcher:add_action("Show Resource Selector", function()
+            self.resource_tree_view.open = not self.resource_tree_view.open
+        end, "ctrl+shift+r")
+
+    self.action_dispatcher:add_action("Show Node Selector", function()
+            self.node_tree_view.open = not self.node_tree_view.open
+        end, "ctrl+shift+n")
+
+    -- Add plugins
+
+    self:add_child(require("class.editor.Node2dPlugin")())
+    self:add_child(require("class.editor.TileMapPlugin")())
 end
 
 function Editor:get_active_scene()
@@ -175,7 +221,7 @@ end
 
 function Editor:add_new_scene(filepath)
     local model = SceneModel(filepath)
-        
+
     table.insert(self.scene_models, model)
 
     self.active_scene = #self.scene_models
@@ -188,7 +234,7 @@ function Editor:close_scene(index)
 
     table.remove(self.scene_models, index)
     table.remove(self.scene_views, index)
-    
+
     if (#self.scene_models == 0) then
         self:add_new_scene()
         self.active_scene = 1
@@ -197,61 +243,75 @@ end
 
 function Editor:save_scene()
     local model = self:get_active_scene()
-    
+
     if not model:get_tree():get_root() then
-        self:open_alert_modal("The scene must have a root node to be saved.")
+        --self:open_alert_modal("The scene must have a root node to be saved.")
+
         return
     end
 
     local path = model:get_filepath()
 
     if not path then
-        self:open_save_as_modal()
+        --self:open_save_as_modal()
         return 
     end
-    
+
 end
 
-function Editor:transform_to_world(x, y)
-    return self:get_active_view():transform_to_world(x, y - self.view_y)
+function Editor:transform_to_world(point)
+    return self:get_active_view():transform_to_world(point - self.view_pos)
 end
 
-function Editor:transform_to_screen(x, y)
-    local nx, ny = self:get_active_view():transform_to_viewport(x, y)
-    return nx, ny + self.view_y
+function Editor:transform_to_screen(point)
+    return self:get_active_view():transform_to_viewport(point) + self.view_pos
 end
-
 
 -- IMGUI stuff
+
+function Editor:_menu_item(name, checked)
+    local shortcut = self.action_dispatcher:get_shortcut(name) or ""
+
+    if imgui.MenuItem(name, shortcut:upper(), checked) then
+        self.action_dispatcher:do_action(name)
+    end
+end
 
 function Editor:draw()
 
     -- Demo window --
     imgui.ShowDemoWindow() 
-    
+
     -- Main Menu Bar --
     local menu_bar_height = 0 
 
     if imgui.BeginMainMenuBar() then
-    
-        for _, menu in ipairs(MENU_DEF) do
-            if imgui.BeginMenu(menu.name) then
-                for _, item in ipairs(menu.items) do
-                    local shortcut = self:_get_shortcut_for(item.action)
-                    local pressed
-                    if shortcut then
-                        pressed = imgui.MenuItem(item.name, shortcut)
-                    else
-                        pressed = imgui.MenuItem(item.name)
-                    end
-                    
-                    if pressed then
-                        self.actions_to_do[item.action] = true
-                    end
-                    
-                end
-                imgui.EndMenu()
-            end
+
+        if imgui.BeginMenu("File") then
+            self:_menu_item("Save")
+            self:_menu_item("Save As")
+            imgui.Separator()
+            self:_menu_item("New Scene")
+            self:_menu_item("Open Scene")
+            self:_menu_item("Close Scene")
+            imgui.EndMenu()
+        end
+
+        if imgui.BeginMenu("Edit") then
+            self:_menu_item("Undo")
+            self:_menu_item("Redo")
+            imgui.EndMenu()
+        end
+
+        if imgui.BeginMenu("View") then
+            self:_menu_item("Recenter View")        
+            imgui.Separator()
+            self:_menu_item("Toggle Grid", self:get_active_scene():get_draw_grid() )
+            imgui.Separator()
+            self:_menu_item("Show Inspector", self.show_inspector)
+            self:_menu_item("Show Node Selector", self.node_inspector:get_open())
+            self:_menu_item("Show Resource Selector", self.resource_inspector:get_open())
+            imgui.EndMenu()
         end
 
         local mw, mh = imgui.GetWindowSize()
@@ -259,21 +319,25 @@ function Editor:draw()
         imgui.EndMainMenuBar()
     end
 
-    
+
     -- Tabbar --
+    local tab_bar_height = 0
     imgui.SetNextWindowPos(0, menu_bar_height)
-    imgui.SetNextWindowSize(love.graphics.getWidth(), 40)
+    imgui.SetNextWindowSize(love.graphics.getWidth(), 0)
     imgui.PushStyleVar("ImGuiStyleVar_WindowBorderSize", 0)
+
+    
     imgui.Begin("Scenes", true, 
         {
-        "ImGuiWindowFlags_NoTitleBar", 
-        "ImGuiWindowFlags_NoMove", 
-        "ImGuiWindowFlags_NoResize",
-        "ImGuiWindowFlags_NoBringToFrontOnFocus",
-        "ImGuiWindowFlags_NoDocking",
+            "ImGuiWindowFlags_NoTitleBar", 
+            "ImGuiWindowFlags_NoMove", 
+            "ImGuiWindowFlags_NoResize",
+            "ImGuiWindowFlags_NoBringToFrontOnFocus",
+            "ImGuiWindowFlags_NoDocking",
         }
     )
-    imgui.PopStyleVar(1)
+    
+    imgui.PushStyleVar("ImGuiStyleVar_ItemSpacing", 8, 8)
     
     if imgui.BeginTabBar("SceneTabs", {
         "ImGuiTabBarFlags_Reorderable",
@@ -281,282 +345,252 @@ function Editor:draw()
         "ImGuiTabBarFlags_FittingPolicyResizeDown",
         "ImGuiTabBarFlags_AutoSelectNewTabs"
     }) then
-    
+
         for i,model in ipairs(self.scene_models) do
             local tabname = ("%d. %s"):format(i, model:get_name())        
             local tabflags = {}
-            
+
             if model.modified then
                 table.insert(tabflags, "ImGuiTabItemFlags_UnsavedDocument")
             end
-                        
+
             local selected, open = imgui.BeginTabItem(tabname, true, tabflags)
             if selected then
                 self.active_scene = i
                 imgui.EndTabItem()            
             end
-            
+
             if not open then
                 self:close_scene(i)
             end
-            
+
         end
 
         imgui.EndTabBar()
+        
+        imgui.Dummy(0,24)
+        imgui.SameLine()
+        for _,c in ipairs(self.children) do
+            if c.draw_toolbar then
+                c:draw_toolbar()
+            end
+        end
+        
     end
     
-    local _, lh = imgui.GetWindowSize()
-    self.view_y = lh + menu_bar_height
+    imgui.PopStyleVar(1)
 
+    tab_bar_height = select(2, imgui.GetWindowSize())
     imgui.End()
+    imgui.PopStyleVar()
+
+    self.view_pos.y = tab_bar_height + menu_bar_height
+
 
     do -- Scene Nodes
-        local vx = 0
-        local vy = self.view_y
-        local vx2, vy2 = love.graphics.getDimensions()
-        
-        local vw = vx2 - vx
-        local vh = vy2 - vy
-        
+        local gdim = vec2(love.graphics.getDimensions())
+        local vdim = gdim - self.view_pos
+
         local curmodel = self:get_active_scene()
         local view = self:get_active_view()
-                
-        if (vw > 0 and vh > 0) then
-            
+
+        if (vdim.x > 0 and vdim.y > 0) then
+
             local pw, ph = view:get_resolution()
-            if (pw ~= vw or ph ~= vh) then
-                view:set_resolution(vw, vh)
+            if (pw ~= vdim.x or ph ~= vdim.y) then
+                view:set_resolution(vdim.x, vdim.y)
             end
-            
-            
+
             local position = view:get_position()
             local scale = view:get_scale()
+
             -- Scaling for the grid is done manually so that lines are always at full resolution
+
             if curmodel:get_draw_grid() then
-                local minor_w = curmodel:get_grid_minor_w()
-                local minor_h = curmodel:get_grid_minor_h()
-                local major_w = curmodel:get_grid_major_w()
-                local major_h = curmodel:get_grid_major_h()
-                
                 love.graphics.push("all")
-                love.graphics.translate(0, vy)
-                love.graphics.setLineStyle("rough")
-                
-                minor_w = minor_w * scale
-                minor_h = minor_h * scale
-                major_w = major_w * scale
-                major_h = major_h * scale
-                love.graphics.translate(0.5,0.5)
+                local minor = curmodel:get_grid_minor()
+                local major = curmodel:get_grid_major()
                 love.graphics.setColor(0.4, 0.4, 0.4, 0.3)
-                -- Minor Lines
-                draw_grid(
-                    -position.x % minor_w,  -position.y % minor_h, 
-                    vw, vh,
-                    minor_w, minor_h
-                )
-                
+                self:draw_grid(position, scale, minor)
                 love.graphics.setColor(0.7, 0.7, 0.7, 0.3)
-                -- Major Lines
-                draw_grid(
-                    -position.x % major_w,  -position.y % major_h, 
-                    vw, vh,
-                    major_w, major_h
-                )
-                
-                -- Origin Lines
-                local cx, cy = -position.x, -position.y
-                love.graphics.setColor(1,0,0,0.5)
-                love.graphics.line(0, cy, vw, cy)
-                
-                love.graphics.setColor(0,1,0,0.5)
-                love.graphics.line(cx, 0, cx, vh)
-                
+                self:draw_grid(position, scale, major)
                 love.graphics.pop()
             end
-        
-            curmodel:get_tree():draw(0, vy, vw, vh)            
+            
+            love.graphics.push("all")
+            love.graphics.translate(self.view_pos:unpack())            
+
+            -- Always draw origin lines
+            love.graphics.setLineStyle("rough")
+            love.graphics.translate(0.5, 0.5)
+            local cx, cy = -position.x, -position.y
+            love.graphics.setColor(1,0,0,0.5)
+            love.graphics.line(0, cy, vdim.x, cy)
+
+            love.graphics.setColor(0,1,0,0.5)
+            love.graphics.line(cx, 0, cx, vdim.y)
+
+            love.graphics.pop()
+
+            curmodel:get_tree():draw(self.view_pos.x, self.view_pos.y, vdim:unpack()) 
+
         end
     end
-    
-    -- Resource Browser --
-    if self.resource_browser:begin_window() then
-        local changed, new_selection = self.resource_browser:display(self.selected_resources)
-        self.selected_resources = new_selection
-        if changed then
-            self.inspected_resource = get_resource(self.selected_resources[1])
+
+    -- Resource Tree View --
+    if self.resource_tree_view:begin_window() then
+        if imgui.Button(("%s Create Resource"):format(IconFont.FILE_PLUS) ) then
+            self.resource_selector:set_open(true)
         end
-        
+
+        self.resource_tree_view:display(self.resource_tree_view_selection)
+
+        self.resource_tree_view_selection = self.resource_tree_view:get_selection()
+        if self.resource_tree_view:is_selection_changed() then
+            self.inspected_resource = get_resource(self.resource_tree_view_selection[1])
+        end
+        local focus = imgui.IsWindowFocused({"ImGuiFocusedFlags_RootAndChildWindows"})   
+        if focus or self.resource_tree_view:is_selection_changed() then
+            self.show_resource_inspector = true
+        end
+
     end
-    self.resource_browser:end_window()
-    
-    -- Node Browser
-    if self.node_browser:begin_window() then
-        
+    self.resource_tree_view:end_window()
+
+    -- Node Tree View
+    if self.node_tree_view:begin_window() then
         local model = self:get_active_scene()
-        self.node_browser:set_scene_model(model)
-        local changed, new_selection = self.node_browser:display( model:get_selected_nodes() )
-        
-        if changed then
-            model:set_selected_nodes(new_selection)
+        self.node_tree_view:set_scene_model(model)
+        self.node_tree_view:display( model:get_selected_nodes() )
+        model:set_selected_nodes( self.node_tree_view:get_selection() )
+
+        local focus = imgui.IsWindowFocused({"ImGuiFocusedFlags_RootAndChildWindows"})        
+
+        if focus or self.node_tree_view:is_selection_changed() then
+            self.show_resource_inspector = false
         end
-        
+
+        if self.node_tree_view:is_new_node_selected() then -- Add new node
+            local nclass = self.node_tree_view:get_new_node()
+            local sel = model:get_selected_nodes()
+            local path
+            if sel[1] then path = sel[1]:get_absolute_path() end
+
+            local instance = nclass()
+
+            local cmd = model:create_command("Add Node")
+            cmd:add_do_func(function()
+                    model:add_node(path, instance)
+                    model:set_selected_nodes({instance})            
+                end)
+
+            cmd:add_undo_func(function()
+                    model:remove_node(instance)
+                    model:set_selected_nodes(sel)
+                end)
+
+            model:commit_command(cmd)
+        end
+
+
     end
-    self.node_browser:end_window()
-    
+    self.node_tree_view:end_window()
+    self.resource_inspector.open = self.show_inspector
+    self.node_inspector.open = self.show_inspector
+
+    -- Resource inspector
     if self.show_resource_inspector then
         if self.resource_inspector:begin_window() then
             self.resource_inspector:display(self.inspected_resource)
+
+            if self.inspected_resource then
+
+                if self.resource_inspector:is_var_changed() then
+                    local k = self.resource_inspector:get_changed_var_name()
+                    local v = self.resource_inspector:get_changed_var_value()
+
+                    local setter = ("set_%s"):format(k)
+                    self.inspected_resource[setter](self.inspected_resource, v)
+                    self.inspected_resource:set_has_unsaved_changes(true)
+                end
+
+                if self.resource_inspector:is_filepath_changed() then
+                    local new_path = self.resource_inspector:get_new_filepath()
+                    local ext = self.inspected_resource.class.static.extensions[1]
+                    if new_path:match("[^.]+$") ~= ext then
+                        new_path = ("%s.%s"):format(new_path, ext)
+                    end
+
+                    self.inspected_resource:set_filepath(new_path)            
+                end
+
+                if self.resource_inspector:save_pressed() then
+                    save_resource(self.inspected_resource)
+                end
+            end
         end
         self.resource_inspector:end_window()
-    end
-    
-end
 
--- Modals
-function Editor:get_scene_list()
-    local stack = {}
-    local scenes = {}
-    table.insert(stack, "scene")
-    while (#stack > 0) do
-        local top = table.remove(stack)
-        for _,v in ipairs(love.filesystem.getDirectoryItems(top)) do
-            local p = top .. "/" .. v
-            local info = love.filesystem.getInfo(p) 
-            if info.type == "directory" then
-                table.insert(stack, p)
-            else
-                table.insert(scenes, p)
+        if not self.resource_inspector.open then
+            self.show_inspector = false
+        end
+
+        -- Node Inspector
+    else
+        if self.node_inspector:begin_window() then
+            local model = self:get_active_scene()
+            local selected = model:get_selected_nodes()[1]
+            self.node_inspector:display(selected)
+
+            if selected then
+                if self.node_inspector:is_var_changed() then
+                    local name = self.node_inspector:get_changed_var_name()
+                    local v = self.node_inspector:get_changed_var_value()
+                    local old_v = selected[("get_%s"):format(name)](selected)
+                    local ep = selected.class:get_exported_vars()[name]
+                    local merge_mode = ep.editor_hints.merge_mode
+                    if self.node_inspector:is_change_finalized() then
+                        merge_mode = nil
+                    end
+                    local cmd = model:create_command(("Modify %s"):format(name), merge_mode)
+                    
+                    cmd:add_do_var(selected, name, v)
+                    cmd:add_undo_var(selected, name, old_v)
+                    
+                    model:commit_command(cmd)
+                end
             end
         end
-    end
-    
-    table.sort(scenes)
-    
-    return scenes
-end
+        self.node_inspector:end_window()
 
-function Editor:get_resource_list()
-    local stack = {}
-    local resources = {}
-    table.insert(stack, "assets")
-    while (#stack > 0) do
-        local top = table.remove(stack)
-        for _,v in ipairs(love.filesystem.getDirectoryItems(top)) do
-            local p = top .. "/" .. v
-            local info = love.filesystem.getInfo(p) 
-            if info.type == "directory" then
-                table.insert(stack, p)
-            else
-                table.insert(resources, p)
-            end
+        if not self.node_inspector.open then
+            self.show_inspector = false
         end
     end
-    
-    table.sort(resources)
-    
-    return resources
-end
 
--- Alert Modal
-function Editor:open_alert_modal(text)
-    self.alert_text = text
-    imgui.OpenPopup("Alert")
-end
+    -- Resource Selector (modal)
+    if self.resource_selector:begin_window() then
 
-function Editor:draw_alert_modal()
-    local flags = {
-        "ImGuiWindowFlags_AlwaysAutoResize", 
-        "ImGuiWindowFlags_NoResize",
-        "ImGuiWindowFlags_NoMove"
-    }
-    if imgui.BeginPopupModal("Alert", nil, flags) then
-        imgui.Text(self.alert_text)
-        imgui.Separator()
-        
-        if imgui.Button("OK", 120, 0) then
-            imgui.CloseCurrentPopup()
-        end
-        
-        imgui.EndPopup()
+        self.resource_selector:display(self.resource_selector_selection)
+        self.resource_selector_selection = self.resource_selector:get_selection()
+
+        if self.resource_selector:is_selection_changed() then
+            local instance = self.resource_selector_selection[1]()
+            self.inspected_resource = instance
+            self.resource_tree_view_selection = {}
+        end                
     end
-end
+    self.resource_selector:end_window()
 
--- Save as prompt
-function Editor:open_save_as_modal()
-    local model = self:get_active_scene()
-    
-    if not model:get_tree():get_root() then
-        self:open_alert_modal("The scene must have a root node to be saved.")
-        return
-    end
-    
-    imgui.OpenPopup("Save As")
-end
-
-function Editor:draw_save_as_modal()
-
-    local flags = {
-        "ImGuiWindowFlags_AlwaysAutoResize", 
-        "ImGuiWindowFlags_NoResize",
-        "ImGuiWindowFlags_NoMove"
-    }
-
-    if imgui.BeginPopupModal("Save As", nil, flags) then
-        local model = self:get_active_scene()
-        imgui.Text("Enter the filename to save as:")
-        
-        local path = model:get_filepath() or ""
-        imgui.PushItemWidth(-1)
-        local changed, new = imgui.InputText("##Filename", path, 128, {"ImGuiInputTextFlags_EnterReturnsTrue"})
-        
-        imgui.Separator()
-        if changed then
-            if new == "" then 
-                imgui.CloseCurrentPopup()
-            end
-            
-            -- Add extension and scene dir
-            new = ("scene/%s.scene"):format(new)
-            
-            model:set_filepath(new)
-            self:save_scene()
-            imgui.CloseCurrentPopup()
-            
-        end
-        
-        imgui.SameLine()
-        if imgui.Button("Cancel", 120, 0) then
-            imgui.CloseCurrentPopup()
-        end
-    
-    
-        imgui.EndPopup()
-    end
+    console:display(console_output)
 end
 
 -- Callbacks --
 
 function Editor:keypressed(key)
-
-    local shortcut = ""
-    if love.keyboard.isDown("lctrl") then
-        shortcut = shortcut .. "Ctrl+"
+    if self.action_dispatcher:keypressed(key) then
+        return true
     end
-    if love.keyboard.isDown("lalt") then
-        shortcut = shortcut .. "Alt+"
-    end
-    if love.keyboard.isDown("lshift") then
-        shortcut = shortcut .. "Shift+"
-    end
-        
-    shortcut = shortcut .. key
-    local action = SHORTCUTS[shortcut]
-    if action then
-        self.actions_to_do[action] = true
-    end
-        
-        
-
 end
 
 function Editor:mousemoved(x, y, dx, dy)
@@ -564,7 +598,7 @@ function Editor:mousemoved(x, y, dx, dy)
     if not love.mouse.isDown(3) then
         self.dragging = false
     end
-        
+
     if self.dragging then
         local view = self:get_active_view()
         view:set_position(view:get_position() - vec2(dx, dy))
@@ -580,26 +614,26 @@ end
 function Editor:wheelmoved(x, y, dx, dy)
 
     local view = self:get_active_view()
-    
+
     -- First frame, remaining space underneath main menu bar
     -- has not been calculated yet, so return early
-    if self.view_y == 0 then return end
-    
+    if self.view_pos.y == 0 then return end
+
     local old_scale = view:get_scale()
     view:set_scale( get_exp_scale(get_log_scale(view:get_scale()) + dy * 0.05))
     local new_scale = view:get_scale()
-        
-    local rx, ry = x, y - self.view_y
-        
+
+    local rx, ry = x, y - self.view_pos.y
+
     local old_wx = (rx + view:get_position().x ) / old_scale
     local old_wy = (ry + view:get_position().y ) / old_scale
-        
+
     local new_wx = (rx + view:get_position().x ) / new_scale
     local new_wy = (ry + view:get_position().y ) / new_scale
-        
+
     local ox = (new_wx - old_wx) * new_scale
     local oy = (new_wy - old_wy) * new_scale
-        
+
     view:set_position( view:get_position() - vec2(ox, oy) )
 end
 

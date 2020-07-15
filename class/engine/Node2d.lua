@@ -1,13 +1,13 @@
 -- Base class for all 2d objects
 
-local HIT_POINT_RADIUS = 7
-
-local vec2 = require("enginelib.vec2")
+local HIT_POINT_RADIUS = 12
 
 local Node = require("class.engine.Node")
 local Node2d = Node:subclass("Node2d")
 
-Node2d:export_var("position", "vec2", nil, {speed = 1} )
+Node2d:export_var("position", "vec2", {speed = 0.2, merge_mode = "merge_ends", min = -math.huge, max = math.huge})
+
+Node2d:binser_register()
 
 function Node2d:initialize()
     Node.initialize(self)
@@ -27,7 +27,7 @@ function Node2d:_update_global_position()
     self.position_dirty = false
 
     if not parent then
-        self.global_position = vec2(self.position)
+        self.global_position = self.position:clone()
         return
     end
     
@@ -66,20 +66,21 @@ end
 
 function Node2d:set_position(pos)
     self:flag_as_dirty()
-    self.position = pos
+    self.position = pos:clone()
 end
 
 function Node2d:get_position()
-    return vec2(self.position)
+    return self.position:clone()
 end
 
 function Node2d:get_global_position()
 
-    if self.position_dirty then
+    if self.position_dirty or not self:get_parent() then
+
         self:_update_global_position()
     end
-    
-    return vec2(self.global_position)
+
+    return self.global_position:clone()
 end
 
 function Node2d:set_global_position(pos)
@@ -87,10 +88,9 @@ function Node2d:set_global_position(pos)
     self:set_position(self.position + (pos - cur))
 end
 
-
 -- Returns true if the given point has intersected with the node2d
 -- Used for the editor selecting the node
-function Node2d:hit_point(x, y)
+function Node2d:hit_point(point)
     local gp = self:get_global_position()
     
     -- Scale the hit radius according to the zoom so it always
@@ -100,15 +100,14 @@ function Node2d:hit_point(x, y)
         scale = self:get_tree():get_viewport():get_scale()
     end
     
-    
-    return (vec2(x, y) - gp):len() < HIT_POINT_RADIUS / scale
+    return (point - gp):len() < HIT_POINT_RADIUS / scale
 end
 
-function Node2d:hit_rect(x, y, w, h)
+function Node2d:hit_rect(rmin, rmax)
 
     local cx, cy = self:get_global_position():unpack()
     
-    return cx > x and cx < x + w and cy > y and cy < y + h
+    return cx > rmin.x and cx < rmax.x and cy > rmin.y and cy < rmax.y
 end
 
 return Node2d

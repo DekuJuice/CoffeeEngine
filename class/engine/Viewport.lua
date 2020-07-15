@@ -4,8 +4,6 @@ local Viewport = Object:subclass("Viewport")
 local MIN_ZOOM = 0.5
 local MAX_ZOOM = 8.0
 
-local vec2 = require("enginelib.vec2")
-
 Viewport:define_get_set("scale")
 Viewport:define_get_set("position")
 
@@ -33,9 +31,12 @@ end
 function Viewport:set()
     love.graphics.push("all")
     love.graphics.setCanvas(self.canvas)
-    love.graphics.clear(0, 0, 0, 0)
     love.graphics.translate(-self.position.x, -self.position.y)
     love.graphics.scale(self.scale)
+end
+
+function Viewport:clear()
+    love.graphics.clear(0,0,0,0)
 end
 
 function Viewport:unset()
@@ -47,13 +48,18 @@ function Viewport:get_canvas()
 end
 
 -- Converts a point from being relative to the viewport to relative to the world
-function Viewport:transform_to_world(x, y)
-    return (x + self.position.x) / self.scale, (y + self.position.y) / self.scale
+function Viewport:transform_to_world(point)
+    return (point + self.position) / self.scale
 end
 
 -- Converts a point from being relative to the world to relative to the viewport
-function Viewport:transform_to_viewport(x, y)
-    return (x * self.scale) - self.position.x, (y * self.scale) - self.position.y
+function Viewport:transform_to_viewport(point)
+    return (point * self.scale) - self.position
+end
+
+-- Returns bounds in world coordinates
+function Viewport:get_bounds()
+
 end
 
 return Viewport

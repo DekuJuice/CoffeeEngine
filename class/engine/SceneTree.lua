@@ -56,24 +56,23 @@ end
 --  2
 --   3
 --    4
---  5
---   6
---  7
+--    5
+--  6
+--   7
+--  8
 ]]--
 function SceneTree:_traverse()
     
     local stack = {self.root}
     local nodes = {}
     
-    local i = #stack
-    while (i > 0) do
+    while (#stack > 0) do
         local top = table.remove(stack)
-        i = i - 1
         
         table.insert(nodes, top)
-        for _, child in ipairs(top:get_children()) do
-            table.insert(stack, child)
-            i = i + 1
+        local children = top:get_children()
+        for i = #children, 1, -1 do
+            table.insert(stack, children[i])
         end
     end
     
@@ -82,9 +81,10 @@ end
 
 -- Iterates in reverse preorder
 --[[
--- 7
---  6
---   5
+-- 8
+--  7
+--   6
+--    5
 --    4
 --  3
 --   2
@@ -105,6 +105,7 @@ end
 
 function SceneTree:draw(x, y, w, h)
     self.viewport:set()
+    self.viewport:clear()
         
     for _, node in ipairs(self:_traverse()) do
         if node.draw then node:draw() end

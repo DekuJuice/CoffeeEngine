@@ -350,7 +350,7 @@ local function newbinser()
             accum[#accum + 1] = "\208"
             accum[#accum + 1] = number_to_str(visited[x])
         else
-            if check_custom_type(x, visited, #accum) then return end
+            if check_custom_type(x, visited, accum) then return end
             error("Cannot serialize this cdata.")
         end
     end

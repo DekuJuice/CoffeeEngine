@@ -1,66 +1,58 @@
 local Object = require("class.engine.Object")
 
-local ImguiTreeSelector = Object:subclass("ImguiTreeSelector")
+local TreeView = Object:subclass("TreeView")
 
-ImguiTreeSelector:define_signal("menu_button_pressed")
+TreeView:define_signal("menu_button_pressed")
 
-ImguiTreeSelector:define_get_set("modal")
-ImguiTreeSelector:define_get_set("window_name")
-ImguiTreeSelector:define_get_set("select_leaf_only")
-ImguiTreeSelector:define_get_set("bottom_height")
+TreeView:define_get_set("modal")
+TreeView:define_get_set("window_name")
+TreeView:define_get_set("select_leaf_only")
+TreeView:define_get_set("bottom_height")
+TreeView:define_get_set("display_extra_width")
+TreeView:define_get_set("open")
 
-function ImguiTreeSelector:initialize()
+function TreeView:initialize()
     Object.initialize(self)
     self.modal = false
-    self.is_open = true
+    self.open = true
     self.bottom_height = 0
+    self.display_extra_width = 0
     
     self.window_name = "Tree Selector"
     self.select_leaf_only = true
 end
 
-function ImguiTreeSelector:open()
-    self.is_open = true
-end
-
-function ImguiTreeSelector:close()
-    self.is_open = false
-    if self.modal then
-        imgui.CloseCurrentPopup()
-    end
-end
-
 -- Return root node of the tree, needs to be overridden
-function ImguiTreeSelector:get_root()
+function TreeView:get_root()
     return nil
 end
 
 -- Return children of a given node, needs to be overridden
-function ImguiTreeSelector:get_children(node)
+function TreeView:get_children(node)
     return {}
 end
 
 -- Returns if the given node is a leaf, when select_leaf_only is enabled,
 -- for example, to only allow selecting files and disallow directories
-function ImguiTreeSelector:is_leaf(node)
+function TreeView:is_leaf(node)
     return false
 end
 
 -- Return if the given node is a child of parent, needed to auto
 -- open tree nodes when selection is changed programatically
-function ImguiTreeSelector:parent_has_child(parent, child)
+function TreeView:parent_has_child(parent, child)
     return false
 end
 
-function ImguiTreeSelector:get_selected_nodes()
+function TreeView:get_selected_nodes()
     return {}
 end
 
-function ImguiTreeSelector:get_node_name(node)
+function TreeView:get_node_name(node)
     return ""
 end
 
-function ImguiTreeSelector:begin_window(flags)
+function TreeView:begin_window(flags)
     local window_flags = {}
     if flags then
         for _,f in ipairs(flags) do
@@ -72,36 +64,26 @@ function ImguiTreeSelector:begin_window(flags)
     
     local should_draw, window_open
     if self.modal then
-        if self.is_open then
+        if self.open then
             imgui.OpenPopup(self.window_name)
         end
         
-        should_draw, window_open = imgui.BeginPopupModal(self.window_name, self.is_open, window_flags)
+        should_draw, window_open = imgui.BeginPopupModal(self.window_name, self.open, window_flags)
     else
         
-        if not self.is_open then
+        if not self.open then
             return false
         end
         
-        should_draw, window_open = imgui.Begin(self.window_name, self.is_open, window_flags)
+        should_draw, window_open = imgui.Begin(self.window_name, self.open, window_flags)
     end
     
-    self.is_open = window_open
+    self.open = window_open
     
     return should_draw
 end
 
-function ImguiTreeSelector:end_window()
-    if self.is_open then
-        if self.modal then
-            imgui.EndPopup()
-        else
-            imgui.End()
-        end
-    end
-end
-
-function ImguiTreeSelector:display(old_selection)
+function TreeView:display(old_selection)
      
     if not old_selection then return end
      
@@ -112,6 +94,13 @@ function ImguiTreeSelector:display(old_selection)
     if self.modal then b_height = b_height + 32 end
      
     imgui.BeginChild("Selection Area", 0, -b_height, true, {"ImGuiWindowFlags_HorizontalScrollbar"} )
+        
+    if self.display_node_extra then
+        local w = imgui.GetContentRegionAvailWidth()
+        imgui.Columns(2)
+        imgui.SetColumnWidth(-1, w - self.display_extra_width)
+        
+    end
         
     local stack = { self:get_root() }
     while #stack > 0 do
@@ -138,7 +127,7 @@ function ImguiTreeSelector:display(old_selection)
                         break
                     end
                         
-                    if self:parent_has_child(n, node) then
+                    if self:parent_has_child(node, n) then
                         table.insert(tree_node_flags, "ImGuiTreeNodeFlags_DefaultOpen")
                         break
                     end
@@ -155,13 +144,20 @@ function ImguiTreeSelector:display(old_selection)
                     if self.modal then
                         if imgui.IsMouseDoubleClicked(0) then
                             selection_changed = true
-                            self:close()
+                            self.open = false
                         end
                     else
                         selection_changed = true
                     end
                 
                 end
+            end
+                
+            if self.display_node_extra then
+                imgui.NextColumn()
+
+                self:display_node_extra(node)
+                imgui.NextColumn()
             end
                 
             if open then
@@ -174,23 +170,57 @@ function ImguiTreeSelector:display(old_selection)
         end
     end
         
+        
+    if self.display_node_extra then
+        imgui.Columns(1)
+    end
+        
     imgui.EndChild()
     
     if self.modal then
         imgui.Separator()
         
         if imgui.Button("Select", 120, 0) and selected_nodes[1] then
-            selection_changed = true
-            self:close()
+            if not self.select_leaf_only or self:is_leaf(selected_nodes[1]) then
+                selection_changed = true
+                self.open = false
+            end
         end
         imgui.SameLine()
         if imgui.Button("Cancel", 120, 0) then
-            self:close()
+            self.open = false
         end
+
+        if not self.open then
+            imgui.CloseCurrentPopup()
+        end 
     end
-    return selection_changed, selected_nodes
+    
+    self.new_selection = selected_nodes
+    self.selection_changed = selection_changed
 end
 
+function TreeView:end_window()
 
+    self.new_selection = nil
+    self.selection_changed = nil
+    
+    if self.open then
+        if self.modal then
+            imgui.EndPopup()
+        else
+            imgui.End()
+        end
+    end
+end
 
-return ImguiTreeSelector
+-- Querying functions, must be called between display() and end_window()
+function TreeView:is_selection_changed()
+    return self.selection_changed
+end
+
+function TreeView:get_selection()
+    return self.new_selection
+end
+
+return TreeView

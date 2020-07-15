@@ -21,29 +21,36 @@ local lily
 require("enginelib.strong") -- Extensions to string library, registers itself into string global
 require("enginelib.tableutil") -- Extensions to table library
 utf8 = require("utf8") -- utf8 lib not loaded by default
+vec2 = require("enginelib.vec2") -- 2d vectors
 
 -- MISC SETUP --
 do -- Register custom (non-class) types to binser
    -- Classes have their registration handled by the Object class
     local binser = require("enginelib.binser")
     
-    -- Unfortunately, we can't retrieve type information from a cdata struct, and
-    -- there is no way to determine if an arbitrary cdata object is actually a vec2.
-    -- Therefore, we must disable the ffi optimization for vec2 for it to serialize
-    -- correctly
-    local old_jit = _G.jit
-    _G.jit = nil
-    local vec2 = require("enginelib.vec2")
-    _G.jit = old_jit
+    -- Right now, vec2 is our only custom cdata struct, so we just
+    -- assume all cdata types are vec2s. 
     
-    binser.register(getmetatable(vec2), "vec2", 
-    function(instance) 
-        return instance:unpack()
-    end,
-    function(x, y)
-        return vec2(x, y)
-    end)
+    -- This will need to be rewritten if any other cdata types are defined.
+    binser.register("ffi", "ffi", 
+        function(v2)
+            return v2.x, v2.y
+        end,
+        function(x, y)
+            return vec2(x, y)
+        end
+    )
+
+    local ffi = require("ffi")
+    local cdef = ffi.cdef
+    function ffi.cdef(...)
     
+        local info = debug.getinfo(2, "Sl")
+        local lineinfo = info.short_src .. ":" .. info.currentline
+        require("enginelib.log").warn(("C Type defined at %s, please rewrite binser registration"):format(lineinfo))
+        return cdef(...)
+    end
+
 end
 
 -- CALLBACKS --
@@ -103,7 +110,6 @@ local main
 	TODO: Decide how to specify and load the main scene
 
 ]]--
-
 function love.load(args, unfiltered_args)
 
     -- Check if editor or debug is enabled	
@@ -233,7 +239,7 @@ function love.load(args, unfiltered_args)
     input.action_add_bind("foo", "joystick", "axis1+")
     input.action_add_bind("foo", "joystick", "l1")
     ]]--
-    
+
     -- Catch stray globals
     setmetatable(_G, {__newindex = function(self,k,v) error(("Stray global declared '%s'"):format(k)) end})
 end
@@ -275,11 +281,10 @@ function love.draw()
         }
         
         local x = 10
-        local y = 80
+        local y = love.graphics.getHeight() - 22
         
-        
-        for i,v in ipairs(info) do
-            love.graphics.print(v, x, y + (i - 1) * 15)
+        for i = 1, #info do
+            love.graphics.print(info[#info - i + 1], x, y - (i - 1) * 15)
         end
     end
 

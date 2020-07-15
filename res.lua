@@ -105,7 +105,8 @@ function get_resource(path)
             if imp then
                 local ok, result = pcall(binser.deserialize, imp)
                 if ok then
-                    res = result
+                    res = result[1]
+                    log.info(("Loaded import data for %s"):format(path))
                 else
                     err = result
                 end
@@ -117,6 +118,7 @@ function get_resource(path)
         end
         
         if not res then
+            log.info(("No import data for %s found, using defaults"):format(path))
             res = rclass()
         end
         
@@ -126,7 +128,7 @@ function get_resource(path)
     else  -- Native resources can be directly deserialized with binser
         local ok, result = pcall(binser.deserialize, fd:getString())
         if ok then
-            res = result
+            res = result[1]
         else
             log.error(result)
             return 
@@ -134,6 +136,7 @@ function get_resource(path)
     end
 
     cache_resource(path, res)
+    res:set_has_unsaved_changes(false)
     
     log.info(("Loaded resource %s"):format(path))
 
@@ -179,6 +182,7 @@ function load_background(paths, on_complete, on_error, on_loaded)
                         table.insert(lily_args, {"read", import_path})
                         table.insert(lily_index_map, info_index)
                     else
+                        log.info(("No import data for %s found, using defaults"):format(p))
                         info.resource = rclass()
                     end
                 else
@@ -213,8 +217,9 @@ function load_background(paths, on_complete, on_error, on_loaded)
         if case == "NativeResource" then
             local ok, result = pcall(binser.deserialize, data)
             if ok then
-                loaded_resources[index] = result
-                cache_resource(info.path, result)
+                loaded_resources[index] = result[1]
+                cache_resource(info.path, result[1])
+                result[1]:set_has_unsaved_changes(false)
                 log.info(("Loaded in background %s"):format(info.path))
             else
                 log.error(result)
@@ -224,7 +229,7 @@ function load_background(paths, on_complete, on_error, on_loaded)
             if case == "ImportSettings" then
                 local ok, result = pcall(binser.deserialize, data)
                 if ok then
-                    info.resource = result
+                    info.resource = result[1]
                 else
                     log.error(result)
                     info.resource = info.class()
@@ -240,6 +245,7 @@ function load_background(paths, on_complete, on_error, on_loaded)
                 if ok then
                     loaded_resources[index] = info.resource
                     cache_resource(info.path, info.resource)
+                    info.resource:set_has_unsaved_changes(false)
                     log.info(("Loaded in background %s"):format(info.path))
                 else
                     log.error(err)
@@ -294,7 +300,7 @@ function write_file(path, data, on_complete, on_error)
         
         -- Move new file
         os.rename(real_tmp, real_path)
-        
+                
         if on_complete then on_complete() end
     end)
 
@@ -307,17 +313,25 @@ end
 function save_resource(resource)
     assert(resource:get_filepath(), "Resource needs a path to be saved")
     
-    local target_path = resource:get_filepath()
+    local filepath = resource:get_filepath()
+    local target_path = filepath
     
     if resource:isInstanceOf(ImportedResource) then
         target_path = target_path .. IMPORT_EXT    
     end
     
+    -- Resource only serialize to a reference by default
+
+    resource:set_serialize_full(true)
     local data = binser.serialize(resource)
+    resource:set_serialize_full(false)
     
-    write_file(target_path, data)
+    write_file(target_path, data, function() 
+        log.info(("Saved resource %s"):format(filepath))
+        resource:set_has_unsaved_changes(false)
+    end)
     
-    cache_resource(target_path, resource)
+    cache_resource(filepath, resource)
 end
 
 end

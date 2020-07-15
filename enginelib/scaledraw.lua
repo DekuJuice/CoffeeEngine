@@ -14,7 +14,7 @@ local function calculate_scaled_dimensions(w1,h1,w2,h2)
     return w1 * ratio, h1 * ratio
 end
 
-local function get_transform(scale_mode, tw, th, x, y, w, h)
+function module.get_transform(scale_mode, tw, th, x, y, w, h)
 
     local scale_x
     local scale_y
@@ -57,17 +57,16 @@ end
 function module.draw(texture, scale_mode, x, y, w, h )
     local tw, th = texture:getDimensions()
     local scale_x, scale_y, offset_x, offset_y =
-        get_transform(scale_mode, tw, th, x, y, w, h)
+        module.get_transform(scale_mode, tw, th, x, y, w, h)
 
     love.graphics.draw(texture, x + offset_x, y + offset_y, 0, scale_x, scale_y)
     --love.graphics.rectangle("line", x, y, w, h)
 
 end
 
-function module.transform_point(x, y, texture, scale_mode, dx, dy, w, h)
-    local tw, th = texture:getDimensions()
+function module.transform_point(x, y, scale_mode, tw, th, dx, dy, w, h)
     local scale_x, scale_y, offset_x, offset_y =
-        get_transform(scale_mode, tw, th, dx, dy, w, h)
+        module.get_transform(scale_mode, tw, th, dx, dy, w, h)
     
     local tx = (x - dx - offset_x) / scale_x
     local ty = (y - dy - offset_y) / scale_y
@@ -75,13 +74,12 @@ function module.transform_point(x, y, texture, scale_mode, dx, dy, w, h)
     return tx, ty
 end
 
-function module.untransform_point(x, y, texture, scale_mode, dx, dy, w, h)
-    local tw, th = texture:getDimensions()
+function module.untransform_point(x, y, scale_mode, tw, th, dx, dy, w, h)
     local scale_x, scale_y, offset_x, offset_y =
-        get_transform(scale_mode, tw, th, dx, dy, w, h)
+        module.get_transform(scale_mode, tw, th, dx, dy, w, h)
         
     local ux = x * scale_x + dx + offset_x
-    local uy = y * scale_y + uy + offset_y
+    local uy = y * scale_y + dy + offset_y
     
     return tx, ty
 end

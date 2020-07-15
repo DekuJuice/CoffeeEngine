@@ -14,3 +14,6 @@ function table.copy(t, do_recurse)
     return c
 end
 
+function table.pack(...)
+  return { n = select("#", ...), ... }
+end

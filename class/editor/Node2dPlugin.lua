@@ -1,4 +1,3 @@
-local vec2 = require("enginelib.vec2")
 
 local Node = require("class.engine.Node")
 local Node2d = require("class.engine.Node2d")
@@ -17,8 +16,6 @@ function Node2dPlugin:initialize()
 
     self.drag_anchor = vec2()
     self.prev_drag_anchor = vec2()
-    
-    self.position_cache = {}
 end
 
 -- Selection rect is in world coordinates
@@ -26,28 +23,28 @@ function Node2dPlugin:get_selection_rect()
     local ax, ay =  self.select_anchor:unpack()
     local cx, cy = self.select_cursor:unpack()
         
-    local w = math.abs(ax - cx)
-    local h = math.abs(ay - cy)
+    local xmin = math.min(ax, cx)
+    local ymin = math.min(ay, cy)
+    local xmax = math.max(ax, cx)
+    local ymax = math.max(ay, cy)
     
-    local x = math.min(ax, cx)
-    local y = math.min(ay, cy)
     
-    return x, y, w, h
+    return vec2(xmin, ymin), vec2(xmax, ymax)
 end
 
+-- Selected nodes are guranteed to be ordered such that
+-- the index of any children are hiegher than their parents
 function Node2dPlugin:update_selection()
     local editor = self:get_parent()
     local model = editor:get_active_scene()
     
-    local x,y,w,h = self:get_selection_rect()
+    local rmin, rmax = self:get_selection_rect()
     
     local selected = {}
     
     for _,c in ipairs(model:get_tree():_traverse()) do
         if c:isInstanceOf(Node2d) then
-            local cx, cy = c:get_global_position():unpack()
-            
-            if c:hit_rect(x, y, w, h) then
+            if c:hit_rect(rmin, rmax) then
                 table.insert(selected, c)
             end
         end
@@ -59,24 +56,42 @@ end
 function Node2dPlugin:drag_nodes() 
     local editor = self:get_parent()
     local model = editor:get_active_scene()
+    local cmd = model:create_command("Move Node2d", "merge_ends")
     
     local delta = self.drag_anchor - self.prev_drag_anchor
-    self.prev_drag_anchor = vec2(self.drag_anchor)
+    self.prev_drag_anchor = self.drag_anchor:clone()
     
     local selection = model:get_selected_nodes()
     local new_positions = {}
+    local old_positions = {}
 
     -- Selected nodes may be parents or children of each other,
-    -- so we calculate their final positions before moving any
+    -- so we calculate their final positions before moving any.
+    
+    -- We know that parents will always have a lower index than their
+    -- children, so we can don't need to worry about their global position
+    -- causing children whose positions were already set to be updated
     for _,c in ipairs(selection) do
         if c:isInstanceOf(Node2d) then
+            table.insert(old_positions, {c, c:get_global_position() })
             table.insert(new_positions, {c, c:get_global_position() + delta})
         end
     end
     
-    for _,np in ipairs(new_positions) do
-        np[1]:set_global_position(np[2])
-    end
+    cmd:add_do_func(function() 
+        for _,np in ipairs(new_positions) do
+            np[1]:set_global_position(np[2])
+        end
+    end)
+    
+    cmd:add_undo_func(function()
+        for _,op in ipairs(old_positions) do
+            op[1]:set_global_position(op[2])
+        end
+    end)
+    
+    model:commit_command(cmd)
+
 end
 
 function Node2dPlugin:update(dt)
@@ -84,45 +99,30 @@ function Node2dPlugin:update(dt)
     if self.selecting then
         if not love.mouse.isDown(1) then
             self:update_selection()
-
             self.selecting = false
         end
     elseif self.dragging then
+        local editor = self:get_parent()
+        local model = editor:get_active_scene()
         if not love.mouse.isDown(1) then
-            -- Commit action
-            local editor = self:get_parent()
-            local model = editor:get_active_scene()
-            
-            local current_positions = {}
-            for _,c in ipairs(model:get_selected_nodes()) do
-                if c:isInstanceOf(Node2d) then
-                    table.insert(current_positions, {c, c:get_global_position()})
+            local cmd = model:create_command("Move Node2d")
+            local global_pos = {}
+            for _,obj in ipairs(model:get_selected_nodes()) do
+                if obj:isInstanceOf(Node2d) then
+                    table.insert(global_pos, {obj, obj:get_global_position()})
                 end
             end
-            local old_positions = table.copy(self.position_cache)
             
-            model:start_command("Move Nodes", false)
-            
-            model:add_do_function(function()
-            
-                for _,cp in ipairs(current_positions) do
-                    cp[1]:set_global_position(cp[2])
+            cmd:add_do_func(function()
+                for _, gp in pairs(global_pos) do
+                    gp[1]:set_global_position(gp[2])
                 end
             end)
             
-            model:add_undo_function(function()
-                for _,cp in ipairs(old_positions) do
-                    cp[1]:set_global_position(cp[2])
-                end
-            end)
-            
-            
-            
-            model:end_command()
-            
-            
+            model:commit_command(cmd)
             self.dragging = false
         end
+
     end
 end
 
@@ -131,22 +131,19 @@ function Node2dPlugin:draw()
     
     -- Draw selection rect
     if self.selecting then
-        local x, y, w, h = self:get_selection_rect()
+        local rmin, rmax = self:get_selection_rect()
         
-        x, y = editor:transform_to_screen(x, y)
-        w, h = editor:transform_to_screen(w, h)
-        
-        local wo, ho = editor:transform_to_screen(0, 0)
-        
-        w = w - wo
-        h = h - ho
+        rmin = editor:transform_to_screen(rmin)
+        rmax = editor:transform_to_screen(rmax)
+
+        local dim = rmax - rmin
         
         love.graphics.push("all")
         
         love.graphics.setColor(118/255, 207/255, 255/255, 0.18)
-        love.graphics.rectangle("fill", x, y, w, h)
+        love.graphics.rectangle("fill", rmin.x, rmin.y, dim:unpack())
         love.graphics.setColor(118/255, 207/255, 255/255, 1)
-        love.graphics.rectangle("line", x + 0.5, y + 0.5, w, h)
+        love.graphics.rectangle("line", rmin.x + 0.5, rmin.y + 0.5, dim:unpack())
         
         love.graphics.pop()
     end
@@ -156,11 +153,10 @@ function Node2dPlugin:draw()
     
     for _,c in ipairs(model:get_tree():_traverse()) do
         if c:isInstanceOf(Node2d) then
-            local sx, sy = editor:transform_to_screen(c:get_global_position():unpack())
-            
+            local sp = editor:transform_to_screen(c:get_global_position())
             local sw, sh = self:get_tree():get_viewport():get_resolution()
             
-            if sx > 0 and sx < sw and sy > 0 and sy < sh then
+            if sp.x > 0 and sp.x < sw and sp.y > 0 and sp.y < sh then
                
                 love.graphics.push("all")
                 
@@ -170,11 +166,9 @@ function Node2dPlugin:draw()
                     love.graphics.setColor(0, 0, 0, 1)
                 end
                 
-                
-                love.graphics.circle("line", sx, sy, 5)                
-                love.graphics.rectangle("line", sx-2, sy-9, 4, 18)
-                love.graphics.rectangle("line", sx-9, sy-2, 18, 4)
-
+                love.graphics.circle("line", sp.x, sp.y, 5)                
+                love.graphics.rectangle("line", sp.x-2, sp.y-9, 4, 18)
+                love.graphics.rectangle("line", sp.x-9, sp.y-2, 18, 4)
                 love.graphics.setBlendMode("replace")
                 
                 
@@ -184,10 +178,9 @@ function Node2dPlugin:draw()
                     love.graphics.setColor(220/255, 220/255, 220/255, 0.3)
                 end
                 
-                love.graphics.rectangle("fill", sx-1, sy-8, 2, 16)
-                love.graphics.rectangle("fill", sx-8, sy-1, 16, 2)
-
-                love.graphics.circle("fill", sx, sy, 3)
+                love.graphics.rectangle("fill", sp.x-1, sp.y-8, 2, 16)
+                love.graphics.rectangle("fill", sp.x-8, sp.y-1, 16, 2)
+                love.graphics.circle("fill", sp.x, sp.y, 3)
                 
                 love.graphics.pop()
                
@@ -199,11 +192,16 @@ end
 
 function Node2dPlugin:mousemoved(x, y, dx, dy)
     local editor = self:get_parent()
-    local wx, wy = editor:transform_to_world(x, y)
+    
+    local wpoint = editor:transform_to_world(vec2(x, y))
+    
     if self.selecting then
-        self.select_cursor = vec2( wx, wy)
+        self.select_cursor = wpoint
     elseif self.dragging then
-        self.drag_anchor = vec2(math.floor(wx), math.floor(wy))
+        wpoint.x = math.floor(wpoint.x)
+        wpoint.y = math.floor(wpoint.y)
+        self.drag_anchor = wpoint        
+        
         self:drag_nodes()
     end
 end
@@ -215,11 +213,11 @@ function Node2dPlugin:mousepressed(x, y, button)
     if button == 1 then
 
         local node_hit = false
-        local wx, wy = editor:transform_to_world(x, y)
+        local wpoint = editor:transform_to_world(vec2(x, y))
         
         -- check if we hit any already selected nodes
         for _,c in ipairs(model:get_selected_nodes()) do
-            if c:isInstanceOf(Node2d) and c:hit_point(wx, wy) then
+            if c:isInstanceOf(Node2d) and c:hit_point(wpoint) then
                 node_hit = true
                 break
             end
@@ -228,7 +226,7 @@ function Node2dPlugin:mousepressed(x, y, button)
         -- Otherwise see if we hit any others
         if not node_hit then
             for _,c in ipairs(model:get_tree():_traverse_reverse()) do
-                if c:isInstanceOf(Node2d) and c:hit_point( wx, wy ) then
+                if c:isInstanceOf(Node2d) and c:hit_point( wpoint ) then
                     model:set_selected_nodes({c})
                     node_hit = true
                     break
@@ -238,22 +236,14 @@ function Node2dPlugin:mousepressed(x, y, button)
 
         if node_hit then
             self.dragging = true
-            self.drag_anchor = vec2(math.floor(wx), math.floor(wy))
-            self.prev_drag_anchor = vec2(math.floor(wx), math.floor(wy))
-            
-            -- Save positions of selected nodes
-            self.position_cache = {}
-            
-            for _,n in ipairs(model:get_selected_nodes()) do
-                if n:isInstanceOf(Node2d) then
-                    table.insert(self.position_cache, {n, n:get_global_position()})
-                end
-            end
-            
+            wpoint.x = math.floor(wpoint.x)
+            wpoint.y = math.floor(wpoint.y)
+            self.drag_anchor = wpoint
+            self.prev_drag_anchor = wpoint:clone() 
         else
             self.selecting = true
-            self.select_anchor = vec2( wx, wy )
-            self.select_cursor = vec2( wx, wy )
+            self.select_anchor = wpoint
+            self.select_cursor = wpoint:clone()
             model:set_selected_nodes({})
         end
     end

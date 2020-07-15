@@ -3,13 +3,7 @@
 local Object = require("class.engine.Object")
 local Node = Object:subclass("Node")
 
--- Only used in editor, indicates that the current node was instanced from a scene file,
--- and therefore should not expose any built in subnodes
-Node:define_get_set("editor_hint_is_instance") 
--- If node was instanced, the scene root will have its filename set to the file it was instanced from
-Node:define_get_set("filename")
-
-Node:export_var("name", "string", {filter = function(name) 
+local function validate_node_name(name)
     if name:len() == 0 then return false end
     for _, char in ipairs({ -- Invalid characters
         "/",
@@ -22,7 +16,16 @@ Node:export_var("name", "string", {filter = function(name)
         end
     end
     return true
-end})
+end
+
+-- Only used in editor, indicates that the current node was instanced from a scene file,
+-- and therefore should not expose any built in subnodes
+Node:define_get_set("editor_hint_is_instance") 
+-- If node was instanced, the scene root will have its filename set to the file it was instanced from
+Node:define_get_set("filename")
+Node:export_var("name", "string", {filter = validate_node_name, merge_mode = "merge_ends"})
+
+Node:binser_register()
 
 function Node:initialize()
     Object.initialize(self)
@@ -101,6 +104,7 @@ function Node:get_parent()
 end
 
 function Node:set_name(name)
+    assert(validate_node_name(name), ("Invalid node name %s"):format(name))
     self.name = name
     self.name_num = 1
     
@@ -196,14 +200,13 @@ function Node:get_absolute_path()
 end
 
 function Node:is_parent_of(other)
-    if other:get_parent() == self then return true end
-    
-    for _,c in ipairs(self.children) do
-        if c:is_parent_of(other) then
-            return true
-        end
+
+    local par = other:get_parent()
+    while par do
+        if par == self then return true end
+        par = par:get_parent()
     end
-    
+
     return false
 end
 
@@ -213,6 +216,12 @@ function Node:set_tree(tree)
     if tree == self.tree then return end
 
     self.tree = tree
+    if tree then
+        self:entered_tree()
+    else
+        self:exited_tree()
+    end
+    
     for _,child in ipairs(self:get_children()) do
         child:set_tree(tree)
     end
@@ -221,5 +230,9 @@ end
 function Node:get_tree()
     return self.tree
 end
+
+-- Callbacks
+function Node:entered_tree() end
+function Node:exited_tree() end
 
 return Node

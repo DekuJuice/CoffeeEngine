@@ -1,19 +1,19 @@
-local ImguiTreeSelector = require("class.editor.ImguiTreeSelector")
+local TreeView = require("class.editor.TreeView")
 
-local ImguiNodeBrowser = ImguiTreeSelector:subclass("ImguiNodeBrowser")
+local NodeSelector = TreeView:subclass("NodeSelector")
 
-function ImguiNodeBrowser:initialize()
-    ImguiTreeSelector.initialize(self)
-    
+function NodeSelector:initialize()
+    TreeView.initialize(self)
     self:set_select_leaf_only(false)
     self:set_modal(true)
+    self:set_open(false)
 end
 
-function ImguiNodeBrowser:get_root()
+function NodeSelector:get_root()
     return require("class.engine.Node")
 end
 
-function ImguiNodeBrowser:get_children(class)
+function NodeSelector:get_children(class)
     local children = {}
     
     for subclass in pairs(class.subclasses) do
@@ -29,7 +29,7 @@ function ImguiNodeBrowser:get_children(class)
     return children
 end
 
-function ImguiNodeBrowser:is_leaf(class)
+function NodeSelector:is_leaf(class)
     
     -- Will return false if there are any subclasses
     for _ in pairs(class.subclasses) do 
@@ -39,12 +39,12 @@ function ImguiNodeBrowser:is_leaf(class)
     return true
 end
 
-function ImguiNodeBrowser:parent_has_child(c1, c2)
+function NodeSelector:parent_has_child(c1, c2)
     return c2:isSubclassOf(c1)
 end
 
-function ImguiNodeBrowser:get_node_name(class)
+function NodeSelector:get_node_name(class)
     return class.name
 end
 
-return ImguiNodeBrowser
+return NodeSelector
