@@ -2,8 +2,8 @@ local Tileset = require("class.engine.resource.Tileset")
 
 local InfiniteGrid = require("class.engine.InfiniteGrid")
 
-local Node2d = require("class.engine.Node2d")
-local TileMap = Node2d:subclass("TileMap")
+local Collidable = require("class.engine.Collidable")
+local TileMap = Collidable:subclass("TileMap")
 
 TileMap:export_var("tile_data", "data")
 TileMap:export_var("tileset", "resource", {resource_type = Tileset})
@@ -13,7 +13,7 @@ TileMap:export_var("tile_size", "int", {min = 4, max = 1024, merge_mode = "merge
 TileMap:binser_register()
 
 function TileMap:initialize()
-    Node2d.initialize(self)
+    Collidable.initialize(self)
 
     self.tile_data = InfiniteGrid()
     self.sprite_batches = {}

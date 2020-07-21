@@ -2,6 +2,7 @@
 
 local HIT_POINT_RADIUS = 12
 
+local intersect = require("enginelib.intersect")
 local Node = require("class.engine.Node")
 local Node2d = Node:subclass("Node2d")
 
@@ -64,6 +65,11 @@ function Node2d:flag_as_dirty()
     end
 end
 
+function Node2d:translate(delta)
+    self:flag_as_dirty()
+    self.position = self.position + delta
+end
+
 function Node2d:set_position(pos)
     self:flag_as_dirty()
     self.position = pos:clone()
@@ -103,11 +109,8 @@ function Node2d:hit_point(point)
     return (point - gp):len() < HIT_POINT_RADIUS / scale
 end
 
-function Node2d:hit_rect(rmin, rmax)
-
-    local cx, cy = self:get_global_position():unpack()
-    
-    return cx > rmin.x and cx < rmax.x and cy > rmin.y and cy < rmax.y
+function Node2d:hit_rect(rmin, rmax)    
+    return intersect.point_aabb(self:get_global_position(), rmin, rmax)
 end
 
 return Node2d

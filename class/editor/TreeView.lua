@@ -128,7 +128,7 @@ function TreeView:display(old_selection)
                     end
                         
                     if self:parent_has_child(node, n) then
-                        table.insert(tree_node_flags, "ImGuiTreeNodeFlags_DefaultOpen")
+                        imgui.SetNextTreeNodeOpen(true)
                         break
                     end
                 end

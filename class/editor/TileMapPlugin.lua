@@ -105,11 +105,10 @@ function TileMapPlugin:update()
     end
 end
 
-function TileMapPlugin:entered_tree()
-    local tmap = TileMap()
+function TileMapPlugin:enter_tree()
+    --[[local tmap = TileMap()
     tmap:set_tileset(get_resource("assets/tilesets/Forest1.tset"))
-    self:get_parent():get_active_scene():add_node(nil, tmap)
-    self:get_parent():get_active_scene():set_selected_nodes({tmap})
+    self:get_parent():get_active_scene():add_node(nil, tmap)]]--
 end
 
 function TileMapPlugin:place_tiles()
@@ -353,23 +352,19 @@ function TileMapPlugin:draw()
         
         rectmin = editor:transform_to_screen(rectmin)
         rectmax = editor:transform_to_screen(rectmax)
+        love.graphics.push("all")
         love.graphics.setColor(118/255, 207/255, 255/255, 0.18)
         love.graphics.rectangle("fill", rectmin.x, rectmin.y, rectmax.x - rectmin.x, rectmax.y - rectmin.y)
         love.graphics.setColor(118/255, 207/255, 255/255, 1)
         love.graphics.rectangle("line", rectmin.x, rectmin.y, rectmax.x - rectmin.x, rectmax.y - rectmin.y)
+        love.graphics.pop()
     end
-    
-    -- Brush preview
+    -- Highlight rect 
     local mp = vec2(love.mouse.getPosition())
     local wp = editor:transform_to_world(mp)
     local center_cell = tilemap:transform_to_map(wp)
     
-    
-    if self.tool == BRUSH_TOOL then
-    end
-    
-    -- Highlight rect 
-    if self.tool == BRUSH_TOOL or self.tool == ERASE_TOOL then
+    if (self.tool == BRUSH_TOOL or self.tool == ERASE_TOOL) and not self.sampling_tiles then
         local brush
         if self.tool == BRUSH_TOOL then 
             brush = self.brush
@@ -378,11 +373,13 @@ function TileMapPlugin:draw()
         end
     
         local half_d = vec2(math.floor(brush.width / 2), math.floor(brush.height / 2))
-        local rectmin = center_cell - half_d
-        local rectmax = center_cell + half_d
+        local rectmin = center_cell
+        local rectmax = center_cell + vec2(brush.width, brush.height)
+        rectmin = rectmin - half_d
+        rectmax = rectmax - half_d
         
         rectmin = tilemap:transform_to_world(rectmin)
-        rectmax = tilemap:transform_to_world(rectmax + vec2(1, 1))
+        rectmax = tilemap:transform_to_world(rectmax)
         
         rectmin = editor:transform_to_screen(rectmin)
         rectmax = editor:transform_to_screen(rectmax)
@@ -391,26 +388,7 @@ function TileMapPlugin:draw()
         love.graphics.setColor(118/255, 207/255, 255/255, 1)
         love.graphics.rectangle("line", rectmin.x, rectmin.y, rectmax.x - rectmin.x, rectmax.y - rectmin.y)
     
-    
     end
-    
-    
-
-    
-    --[[if self.bucket_preview then
-        -- really stupid hack to reuse drawing code to draw fill preview
-        love.graphics.push("all")
-        love.graphics.translate(-position.x, -position.y)
-        
-        local v_offset = editor:transform_to_screen( view:transform_to_world(vec2.zero) ) 
-        love.graphics.scale(scale)
-        love.graphics.translate((v_offset / scale):unpack())
-        
-        local old_data = tilemap:get_tile_data()
-        
-        love.graphics.pop()
-        
-    end]]--
 end
 
 function TileMapPlugin:keypressed(key, scan, isRepeat)

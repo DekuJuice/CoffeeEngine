@@ -3,28 +3,35 @@ local scaledraw = require("enginelib.scaledraw")
 local Object = require("class.engine.Object")
 local Node2d = require("class.engine.Node2d")
 local Viewport = require("class.engine.Viewport")
+local PhysicsWorld = require("class.engine.PhysicsWorld")
 
 local SceneTree = Object:subclass("SceneTree")
 SceneTree:define_get_set("scale_mode")
+SceneTree:define_get_set("debug_draw_physics")
 
 function SceneTree:initialize()
     Object.initialize(self)
     -- Scenetree can only have 1 root node
     self.root = nil
-    
     self.viewport = Viewport(800, 600)
     self.scale_mode = "aspect"
+    self.physics_world = PhysicsWorld()
+    self.debug_draw_physics = false
+end
+
+function SceneTree:get_physics_world()
+    return self.physics_world
 end
 
 function SceneTree:set_root(root)
     -- Remove reference to self from existing root and children
     if self.root then
-        self.root:set_tree(nil)
+        self.root:_set_tree(nil)
     end
     self.root = root
     -- Give reference to self to children
     if self.root then
-        self.root:set_tree(self)
+        self.root:_set_tree(self)
     end
 end
 
@@ -44,8 +51,12 @@ function SceneTree:get_viewport()
 end
 
 function SceneTree:update(dt)
-    for _,node in ipairs(self:_traverse()) do
-        if node.update then node:update(dt) end
+    for _, node in ipairs(self:_traverse()) do
+        node:event("update", dt)
+    end
+    
+    for _, node in ipairs(self:_traverse()) do
+        node:event("physics_update", dt)
     end
 end
 
@@ -103,16 +114,23 @@ function SceneTree:_traverse_reverse()
     return nodes
 end
 
-function SceneTree:draw(x, y, w, h)
+function SceneTree:render()
     self.viewport:set()
     self.viewport:clear()
         
     for _, node in ipairs(self:_traverse()) do
-        if node.draw then node:draw() end
+        node:event("draw")
+    end
+    if self.debug_draw_physics then
+        self.physics_world:debug_draw()
     end
         
     self.viewport:unset()
-    
+end
+
+function SceneTree:draw(x, y, w, h)
+
+    self:render()
     love.graphics.push("all")
     love.graphics.setBlendMode("alpha", "premultiplied")
     
@@ -141,10 +159,8 @@ for _, callback in ipairs({
 }) do
     SceneTree[callback] = function(self, ...)
         for _,node in ipairs(self:_traverse_reverse()) do
-            if node[callback] then 
-                if node[callback](node, ...) then
-                    break
-                end
+            if node:event(callback, ...) then
+                return
             end
         end
     end

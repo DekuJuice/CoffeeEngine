@@ -1,3 +1,4 @@
+local intersect = require("enginelib.intersect")
 
 local Node = require("class.engine.Node")
 local Node2d = require("class.engine.Node2d")
@@ -171,7 +172,6 @@ function Node2dPlugin:draw()
                 love.graphics.rectangle("line", sp.x-9, sp.y-2, 18, 4)
                 love.graphics.setBlendMode("replace")
                 
-                
                 if model:is_selected(c) then
                     love.graphics.setColor(255/255, 119/255, 119/255, 0.7)
                 else
@@ -185,7 +185,6 @@ function Node2dPlugin:draw()
                 love.graphics.pop()
                
             end
-            
         end
     end
 end

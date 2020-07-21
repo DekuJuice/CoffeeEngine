@@ -72,6 +72,7 @@ do
     end
 
     preload_class("class/engine")
+    preload_class("class/game")
 
 
 -- Also override print so we can display console output ingame
@@ -112,9 +113,7 @@ function Editor:draw_grid(position, scale, cellsize)
         love.graphics.line(0, y + origin.y, vw, y + origin.y)
     end
 
-
     love.graphics.pop()
-
 end
 
 function Editor:initialize()
@@ -122,16 +121,13 @@ function Editor:initialize()
     Node.initialize(self, "Editor")
 
     self.scene_models = {}
-    self.scene_views = {}
-
     self.active_scene = 1
     self:add_new_scene() -- Make sure there is always at least one scene open
 
     self.dragging = false
     self.view_pos = vec2()
     self.action_dispatcher = ActionDispatcher()
-
-
+    
     -- Add other components of the editor
     self.resource_tree_view = ResourceTreeView()
     self.resource_tree_view:set_window_name("Resources")
@@ -188,6 +184,12 @@ function Editor:initialize()
             local scene = self:get_active_scene()
             scene:set_draw_grid( not scene:get_draw_grid() )
         end, "ctrl+g")
+        
+    self.action_dispatcher:add_action("Toggle Physics Debug", function()
+            local scene = self:get_active_scene()
+            local tree = scene:get_tree()
+            tree:set_debug_draw_physics(not tree:get_debug_draw_physics())
+    end, "ctrl+]")
 
     self.action_dispatcher:add_action("Recenter View", function()
             self:get_active_view():set_position(vec2(0, 0))
@@ -205,10 +207,23 @@ function Editor:initialize()
             self.node_tree_view.open = not self.node_tree_view.open
         end, "ctrl+shift+n")
 
+    self.action_dispatcher:add_action("Play Scene", function()
+        local scene = self:get_active_scene()
+        
+        if not scene:get_tree():get_root() then return end
+        
+        local player = self:get_node("ScenePlayer")
+        local packed_scene = scene:pack()
+        
+        player:play(packed_scene)        
+    end, "f5")
+
     -- Add plugins
 
     self:add_child(require("class.editor.Node2dPlugin")())
     self:add_child(require("class.editor.TileMapPlugin")())
+    self:add_child(require("class.editor.CollidablePlugin")())
+    self:add_child(require("class.editor.ScenePlayer")())
 end
 
 function Editor:get_active_scene()
@@ -221,7 +236,7 @@ end
 
 function Editor:add_new_scene(filepath)
     local model = SceneModel(filepath)
-
+    model:get_tree():set_debug_draw_physics(true)
     table.insert(self.scene_models, model)
 
     self.active_scene = #self.scene_models
@@ -233,7 +248,6 @@ function Editor:close_scene(index)
     end
 
     table.remove(self.scene_models, index)
-    table.remove(self.scene_views, index)
 
     if (#self.scene_models == 0) then
         self:add_new_scene()
@@ -368,7 +382,12 @@ function Editor:draw()
 
         imgui.EndTabBar()
         
-        imgui.Dummy(0,24)
+        -- Toolbar --
+        if imgui.Button( ("%s Play Scene"):format(IconFont.PLAY)) then
+            self.action_dispatcher:do_action("Play Scene")
+        end
+        
+        
         imgui.SameLine()
         for _,c in ipairs(self.children) do
             if c.draw_toolbar then
@@ -403,9 +422,7 @@ function Editor:draw()
 
             local position = view:get_position()
             local scale = view:get_scale()
-
             -- Scaling for the grid is done manually so that lines are always at full resolution
-
             if curmodel:get_draw_grid() then
                 love.graphics.push("all")
                 local minor = curmodel:get_grid_minor()
@@ -419,21 +436,17 @@ function Editor:draw()
             
             love.graphics.push("all")
             love.graphics.translate(self.view_pos:unpack())            
-
             -- Always draw origin lines
             love.graphics.setLineStyle("rough")
             love.graphics.translate(0.5, 0.5)
             local cx, cy = -position.x, -position.y
             love.graphics.setColor(1,0,0,0.5)
             love.graphics.line(0, cy, vdim.x, cy)
-
             love.graphics.setColor(0,1,0,0.5)
             love.graphics.line(cx, 0, cx, vdim.y)
-
             love.graphics.pop()
-
+            
             curmodel:get_tree():draw(self.view_pos.x, self.view_pos.y, vdim:unpack()) 
-
         end
     end
 

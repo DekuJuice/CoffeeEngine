@@ -18,11 +18,12 @@ local function validate_node_name(name)
     return true
 end
 
--- Only used in editor, indicates that the current node was instanced from a scene file,
--- and therefore should not expose any built in subnodes
-Node:define_get_set("editor_hint_is_instance") 
+-- Only used in editor
+Node:define_get_set("edit_mode") 
+
 -- If node was instanced, the scene root will have its filename set to the file it was instanced from
 Node:define_get_set("filename")
+
 Node:export_var("name", "string", {filter = validate_node_name, merge_mode = "merge_ends"})
 
 Node:binser_register()
@@ -31,10 +32,69 @@ function Node:initialize()
     Object.initialize(self)
     
     self.name = self.class.name
-    self.name_num = 1
     self.editor_hint_is_instance = false
     
     self.children = {} -- Array of children
+end
+
+-- Checks child nodes for any duplicate names, and generate and assign a new one
+-- if needed.
+function Node:_validate_child_name(child)
+
+    -- Check if there are any nodes with the same name
+    local exists = false
+    for _,c in ipairs(self.children) do
+        if c ~= child and c.name == child.name then
+            exists = true
+            break
+        end
+    end
+    
+    if not exists then return end
+    
+    local cur_num = tonumber(child.name:match("%d+$")) or 1
+    local base_name = child.name:sub(1, -(math.floor(math.log10(cur_num)) + 1))
+    if cur_num == 1 then cur_num = 2 end
+    
+    local attempt
+    
+    while exists do
+            
+        if _G.EDITOR_MODE then
+            attempt = ("%s%d"):format(base_name, cur_num)
+            cur_num = cur_num + 1
+        else
+            attempt = ("%s%d"):format(base_name, love.math.random(2^32))
+        end
+            
+        exists = false
+        for _,c in ipairs(self.children) do
+            if c ~= child and c.name == attempt then
+                exists = true
+                break
+            end
+        end
+    end
+    
+    child.name = attempt
+
+end
+
+function Node:_set_tree(tree)
+
+    if tree == self.tree then return end
+
+    if tree then
+        self.tree = tree
+        self:event("enter_tree")
+    else
+        self:event("exit_tree")
+        self.tree = nil
+    end
+
+    for _,child in ipairs(self:get_children()) do
+        child:_set_tree(tree)
+    end
 end
 
 -- If child already has a parent, will reparent it to the current node
@@ -50,41 +110,9 @@ function Node:add_child(child)
     
     child.parent = self
     self:_validate_child_name(child)
-    
-    child:set_tree(self:get_tree())
-end
-
--- Checks child nodes for any duplicate names, and generate and assign a new one
--- if needed.
-function Node:_validate_child_name(child)
-    while true do
-        local attempt = child:get_full_name()
-        local exists = false
+    child:_set_tree(self:get_tree())
         
-        for _,c in ipairs(self.children) do
-            if c ~= child and c:get_full_name() == attempt then
-                exists = true
-                break
-            end
-        end
-        
-        if not exists then 
-            break
-        end
-        
-        -- If we're in editor, we'll make the new name sequential,
-        -- that is, if Child (1) and Child (2) already exist, the new child will be renamed
-        -- Child (3)
-        -- This is slow as we will end up iterating self.children n times, where n is the number
-        -- of children with the same name.
-        
-        -- If we're not in editor mode, we'll just generate some random integer instead.
-        if _G.EDITOR_MODE then
-            child.name_num = child.name_num + 1            
-        else
-            child.name_num = love.math.random(2^32)
-        end
-    end
+    child:event("parented")
 end
 
 function Node:remove_child(child)
@@ -93,30 +121,41 @@ function Node:remove_child(child)
             c.parent = nil
             c.name_num = 1
             table.remove(self.children, i)
+            
+            child:event("unparented")
+            
             return true
         end
     end
     return false
 end
 
+-- Callback order is dependant on child order, so this may be useful
+function Node:move_child(child, new_index)
+    assert(new_index >= 1 and new_index <= #self.children, "Index must be between 1 and the number of children")
+    
+    for j, c in ipairs(self.children) do
+        if c == child then
+            table.remove(self.children, j)
+            table.insert(self.children, new_index, child)
+            return
+        end
+    end
+    
+    error("The given node is not a child of this node")    
+end
+
 function Node:get_parent()
     return self.parent
 end
 
+-- If there are multiple child nodes that have the same "base" name, the node
+-- will be renamed to ensure its path is unique
 function Node:set_name(name)
     assert(validate_node_name(name), ("Invalid node name %s"):format(name))
     self.name = name
-    self.name_num = 1
     
     if self.parent then self.parent:_validate_child_name(self) end
-end
-
-function Node:get_full_name()
-    if self.name_num > 1 then
-        return ("%s (%d)"):format(self.name, self.name_num)
-    else
-        return self.name
-    end
 end
 
 function Node:get_child_count()
@@ -145,7 +184,7 @@ function Node:get_node(path)
         local next_next_path = next_path:match("/(.*)")
         local next_sloc = next_path:find("/")
         
-        if rootname ~= root:get_full_name() then 
+        if rootname ~= root:get_name() then 
             return
         end
         
@@ -170,7 +209,7 @@ function Node:get_node(path)
             end
         else
             for _,c in ipairs(self.children) do
-                if c:get_full_name() == first then
+                if c:get_name() == first then
                     if sloc then
                         return c:get_node(next_path)
                     else
@@ -190,7 +229,7 @@ end]]
 
 function Node:get_absolute_path()
     assert(self:get_tree(), "Node must be in a tree to get absolute path")
-    local path = ("/%s"):format(self:get_full_name())
+    local path = ("/%s"):format(self:get_name())
     
     if self.parent then 
         return ("%s%s"):format(self.parent:get_absolute_path(), path)
@@ -210,29 +249,42 @@ function Node:is_parent_of(other)
     return false
 end
 
--- This is used internally, you should probably not call this
-function Node:set_tree(tree)
-
-    if tree == self.tree then return end
-
-    self.tree = tree
-    if tree then
-        self:entered_tree()
-    else
-        self:exited_tree()
-    end
-    
-    for _,child in ipairs(self:get_children()) do
-        child:set_tree(tree)
-    end
-end
-
 function Node:get_tree()
     return self.tree
 end
 
--- Callbacks
-function Node:entered_tree() end
-function Node:exited_tree() end
+function Node:propagate_event_preorder(name, allow_interrupt, ...)
+    if self:event(name, ...) and allow_interrupt then
+        return true
+    end
+
+    for _,child in ipairs(self.children) do
+        if child:propagate_event_preorder(name, allow_interrupt, ...) and allow_interrupt then
+            return true
+        end
+    end
+    
+    return false
+end
+
+function Node:propagate_event_postorder(name, allow_interrupt, ...)
+    
+    for i = #self.children, 1, -1 do
+        local child = self.children[i]
+        if child:propagate_event_postorder(name, allow_interrupt, ...) and allow_interrupt then
+            return true
+        end
+    end
+    
+    if self:event(name, ...) and allow_interrupt then
+        return true
+    end
+    
+    return false
+end
+
+function Node:event(name, ...)
+    if self[name] then return self[name](self, ...) end
+end
 
 return Node

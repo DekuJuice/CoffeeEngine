@@ -172,7 +172,7 @@ end
 
 function SceneModel:pack()
     self.packed_scene:pack(self:get_tree():get_root())
-    return self.packed_scene:get_data()
+    return self.packed_scene
 end
 
 function SceneModel:get_tree()

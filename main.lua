@@ -18,8 +18,11 @@ end
 local input = require("input")
 local lily
 
-require("enginelib.strong") -- Extensions to string library, registers itself into string global
+-- These 3 register themselves into the existing corresponding globals
+require("enginelib.strong") -- Extensions to string library
 require("enginelib.tableutil") -- Extensions to table library
+require("enginelib.mathplus") -- Extensions to math library
+
 utf8 = require("utf8") -- utf8 lib not loaded by default
 vec2 = require("enginelib.vec2") -- 2d vectors
 
@@ -43,8 +46,7 @@ do -- Register custom (non-class) types to binser
 
     local ffi = require("ffi")
     local cdef = ffi.cdef
-    function ffi.cdef(...)
-    
+    function ffi.cdef(...) -- Warn if we define any more ctypes
         local info = debug.getinfo(2, "Sl")
         local lineinfo = info.short_src .. ":" .. info.currentline
         require("enginelib.log").warn(("C Type defined at %s, please rewrite binser registration"):format(lineinfo))
@@ -76,6 +78,7 @@ function love.run()
             
                 input.reset_state() -- Called before events are processed to reset pressed/released states
                 
+                -- Propagate event callbacks
                 love.event.pump()
                 for name, a,b,c,d,e,f in love.event.poll() do
                     if name == "quit" then
@@ -105,11 +108,11 @@ end
 
 local main
 
---[[  How the engine works
-
-	TODO: Decide how to specify and load the main scene
-
+--[[  
+    TODO: Engine configuration file, to specify things such as
+    viewport size, default scene, etc
 ]]--
+
 function love.load(args, unfiltered_args)
 
     -- Check if editor or debug is enabled	
@@ -202,10 +205,6 @@ function love.load(args, unfiltered_args)
         imgui.PushStyleVar("ImGuiStyleVar_FrameRounding", 3)
         imgui.PushStyleVar("ImGuiStyleVar_WindowBorderSize", 1)
         imgui.PushStyleVar("ImGuiStyleVar_FrameBorderSize", 1)
-        -- TMP dir for writing scene files
-        love.filesystem.createDirectory("/tmp")
-        
-        love.graphics.setBackgroundColor(0.2, 0.2, 0.25)
     end
     
     love.graphics.setDefaultFilter("nearest")
@@ -224,8 +223,10 @@ function love.load(args, unfiltered_args)
     -- If editor mode enabled, main is the editor
     if _G.EDITOR_MODE then
         main:get_viewport():set_resolution( love.graphics.getDimensions() )
+        main:get_viewport():set_background_color({0.2, 0.2, 0.25, 1})
         main:set_scale_mode("free")
         main:set_root( require("class.editor.Editor")())
+        
     else -- Otherwise, it's the main game scene
         main:set_scale_mode("perfect")
         main:get_viewport():set_resolution(416, 240) 
@@ -289,7 +290,11 @@ function love.draw()
     end
 
     if imgui then
-        imgui.Render()
+        -- Newest version of imgui seems to have random errors in drawlist,
+        -- pcall render so we don't crash
+        local ok, err = pcall(imgui.Render)
+        local log = require("enginelib.log")
+        if err then log.error(err) end
     end
 end
 

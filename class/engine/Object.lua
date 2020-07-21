@@ -56,7 +56,7 @@ Object.static.get_exported_vars = function(class)
 end
 
 Object.static.binser_register = function(class)
-    if not class._deserialize then
+    if not rawget(class.static, "_deserialize") then
         class.static._deserialize = function(data)
             local instance = class()
             for k,v in pairs(data) do

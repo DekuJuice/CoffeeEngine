@@ -41,7 +41,7 @@ function NodeTreeView:parent_has_child(parent, child)
 end
 
 function NodeTreeView:get_node_name(node)
-    return node:get_full_name()
+    return node:get_name()
 end
 
 function NodeTreeView:display(selected)

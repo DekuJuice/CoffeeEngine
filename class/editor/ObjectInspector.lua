@@ -40,10 +40,11 @@ function ObjectInspector:_draw_property_widget(obj, ep)
     local changed = false
     local finalized = false
 
+    imgui.PushID(name)
+    imgui.TableSetColumnIndex(0)
     imgui.AlignTextToFramePadding()
     imgui.Text(display_name)
-    imgui.NextColumn()
-    imgui.PushID(name)
+    imgui.TableSetColumnIndex(1)
     
     if ptype == "string" then
         imgui.PushItemWidth(-1)
@@ -79,7 +80,7 @@ function ObjectInspector:_draw_property_widget(obj, ep)
         velo = velo or 1
         smin = smin or 0
         smax = smax or 100
-        imgui.PushItemWidth(-1)    
+        imgui.PushItemWidth(-1)
         local c, nx, ny = imgui.DragInt2("##Vec2Slider", val.x, val.y, velo, smin, smax)
         finalized = imgui.IsItemDeactivatedAfterEdit()
         new_val = vec2(nx, ny)            
@@ -87,6 +88,26 @@ function ObjectInspector:_draw_property_widget(obj, ep)
     elseif ptype == "bool" then
         changed, new_val = imgui.Checkbox("##Checkbox", val)
         finalized = changed
+    elseif ptype == "bitmask" then
+        local bits = editor_hints.bits or 31
+        for i = 1, bits do
+            local b = 2^(i - 1)
+            local checked = bit.band(b, val) == b
+        
+            if imgui.Checkbox(("##bit%d"):format(i), checked) then
+            
+                new_val = bit.bxor(val, b)
+            
+                finalized = true
+            end
+            
+            if i % 8 ~= 0 then
+                imgui.SameLine()
+            end
+        end
+
+
+
     elseif ptype == "resource" then
         if imgui.Button("Select") then
             self.resource_selector:set_open(true)
@@ -119,9 +140,6 @@ function ObjectInspector:_draw_property_widget(obj, ep)
         end
         self.resource_selector:end_window()
         
-        --new_val = self:imgui_resource_selector_modal("Resource Selector")
-        --changed = new_val ~= nil
-        --finalized = changed
     elseif ptype == "enum" then
         imgui.PushItemWidth(-1)
         if imgui.BeginCombo("##", val) then
@@ -142,7 +160,6 @@ function ObjectInspector:_draw_property_widget(obj, ep)
     end 
     
     imgui.PopID()
-    imgui.NextColumn()
 
     if filter and not (filter(new_val))  then
         new_val = val
@@ -181,31 +198,32 @@ function ObjectInspector:end_window()
 end
 
 function ObjectInspector:display(object)
-    imgui.BeginChild("Selection Area", 0, -self.bottom_height, true, {"ImGuiWindowFlags_HorizontalScrollbar"} )
 
     if object then
+        local flags = {
+            "ImGuiTableFlags_Resizable",
+            "ImGuiTableFlags_RowBg",
+        }
         
-        imgui.Columns(2)
-        
-        local class = object.class
-        while class do
-            local static = rawget(class, "static")
-            if static then
-                local exported = rawget(static, "exported_vars")
-                if exported then
-                    for _,ep in ipairs(exported) do
-                        self:_draw_property_widget(object, ep)
+        if imgui.BeginTable("##Properties", 2, flags, 0, -self.bottom_height - 1)then
+            local class = object.class
+            while class do
+                local static = rawget(class, "static")
+                if static then
+                    local exported = rawget(static, "exported_vars")
+                    if exported then
+                        for _,ep in ipairs(exported) do
+                            imgui.TableNextRow()
+                            self:_draw_property_widget(object, ep)
+                        end
                     end
-                    imgui.Separator()                    
                 end
+                class = class.super
             end
-            class = class.super
+            
+            imgui.EndTable()
         end
-        
-        imgui.Columns(1)
-    end
-    
-    imgui.EndChild()
+    end    
 end
 
 function ObjectInspector:is_var_changed()

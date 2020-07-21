@@ -6,11 +6,13 @@ local MAX_ZOOM = 8.0
 
 Viewport:define_get_set("scale")
 Viewport:define_get_set("position")
+Viewport:define_get_set("background_color")
 
 function Viewport:initialize(w, h)
     self.canvas = love.graphics.newCanvas(w, h)
     self.position = vec2(0, 0)
     self.scale = 1
+    self.background_color = {0,0,0,0}
 end
 
 function Viewport:set_resolution(w, h)
@@ -36,7 +38,7 @@ function Viewport:set()
 end
 
 function Viewport:clear()
-    love.graphics.clear(0,0,0,0)
+    love.graphics.clear(self.background_color)
 end
 
 function Viewport:unset()
