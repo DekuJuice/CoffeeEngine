@@ -115,7 +115,6 @@ local main
 
 function love.load(args, unfiltered_args)
 
-    -- Check if editor or debug is enabled	
     for i, a in ipairs(args) do
         if a == "-editor" then
             _G.EDITOR_MODE = true
@@ -126,6 +125,8 @@ function love.load(args, unfiltered_args)
     
     if _G.EDITOR_MODE then
         print("Starting Editor Mode")
+        -- Editor must be run in unfused mode as we write files directly into the game directory,
+        -- which we cannot do in fused mode
         assert(not love.filesystem.isFused(), "Editor mode can only be used in unfused mode")
     end
 
@@ -220,7 +221,7 @@ function love.load(args, unfiltered_args)
     
     main = SceneTree()
     
-    -- If editor mode enabled, main is the editor
+    -- If editor mode enabled, root is the editor
     if _G.EDITOR_MODE then
         main:get_viewport():set_resolution( love.graphics.getDimensions() )
         main:get_viewport():set_background_color({0.2, 0.2, 0.25, 1})
@@ -234,12 +235,16 @@ function love.load(args, unfiltered_args)
     end
     
     -- Load input bindings
-    --[[input.add_action("foo")
-    input.action_add_bind("foo", "keyboard", "a")
-    input.action_add_bind("foo", "joystick", 1)
-    input.action_add_bind("foo", "joystick", "axis1+")
-    input.action_add_bind("foo", "joystick", "l1")
-    ]]--
+    
+    input.add_action("left")
+    input.action_add_bind("left", "keyboard", "left")
+    
+    input.add_action("right")
+    input.action_add_bind("right", "keyboard", "right")
+    
+    input.add_action("jump")
+    input.action_add_bind("jump", "keyboard", "z")
+
 
     -- Catch stray globals
     setmetatable(_G, {__newindex = function(self,k,v) error(("Stray global declared '%s'"):format(k)) end})
@@ -267,7 +272,6 @@ function love.draw()
     end
 
     if _G.DEBUG then
-        -- Print debug info
         local fps = love.timer.getFPS()
         local gstats = love.graphics.getStats()
         local luamem = collectgarbage("count")
@@ -328,7 +332,7 @@ function love.mousemoved(x, y, dx, dy, is_touch)
         imgui.MouseMoved(x, y, true)
         if imgui.GetWantCaptureMouse() then return end
     end
-
+    
     if main.mousemoved then
         main:mousemoved(x, y, dx, dy, is_touch)
     end
@@ -364,9 +368,7 @@ function love.keypressed(key, scan, isrepeat)
         if imgui.GetWantCaptureKeyboard() then return end
     end
     
-    if input.keypressed then
-        input:keypressed(key, scan, isrepeat)
-    end
+    input.keypressed(key, scan, isrepeat)
     
     if main.keypressed then
         main:keypressed(key, scan, isrepeat)
@@ -380,9 +382,7 @@ function love.keyreleased(key, scan)
         if imgui.GetWantCaptureKeyboard() then return end
     end
     
-    if input.keyreleased then
-        input:keyreleased(key, scan)
-    end
+    input.keyreleased(key, scan)
     
     if main.keyreleased then
         main:keyreleased(key, scan)
@@ -396,7 +396,7 @@ for _, callback in ipairs({
     "joystickhat"
 }) do
     love[callback] = function(...)
-        if input[callback] then input[callback](...) end
+        input[callback](...)
         
         if main[callback] then
             main[callback](main, ...)

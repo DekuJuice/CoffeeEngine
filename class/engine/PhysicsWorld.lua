@@ -24,6 +24,10 @@ local PhysicsWorld = Object:subclass("PhysicsWorld")
 
 local CELL_SIZE = 16 * 6
 
+local function overlap_interval(a, b, c, d)
+    return math.max(a, c), math.min(b, d)
+end
+
 function PhysicsWorld:initialize()
     Object.initialize(self)
     
@@ -86,6 +90,7 @@ function PhysicsWorld:remove_collidable(collidable)
             for i,v in ipairs(self.tilemaps) do
                 if v == collidable then
                     self.tilemaps[i] = self.tilemaps[n]
+                    self.tilemaps[n] = nil
                     break
                 end
             end
@@ -108,16 +113,62 @@ function PhysicsWorld:_step_actor_x(actor, sign)
     for _, obstacle in ipairs(nearby) do
         local omin, omax = obstacle:get_bounding_box()
         
-        if not intersect.aabb_aabb(rmin, rmax, omin, omax)
-        and intersect.aabb_aabb(nmin, nmax, omin, omax) then
+        if not intersect.aabb_aabb(nmin, nmax, omin, omax) then
+            goto CONTINUE
+        end
+        
+        local hm = obstacle:get_heightmap()
+        if #hm == 0 and not intersect.aabb_aabb(rmin, rmax, omin, omax) then
             obstacle_hit = true
             break
+        else
+           
+            local x1, x2 = overlap_interval(nmin.x, nmax.x, omin.x, omax.x)
+            
+            local max_height = 0
+            for x = x1, x2 - 1 do
+                max_height = math.max(max_height, obstacle:get_height(x - omin.x))
+            end
+                        
+            if obstacle:get_flip_v() then                
+                local b_edge = omin.y + max_height
+                if nmin.y < omin.y then
+                    obstacle_hit = true
+                elseif nmin.y < b_edge then
+                    for i = 1, b_edge - nmin.y do
+                        if self:_step_actor_y(actor, 1) then
+                            obstacle_hit = true
+                            actor:translate(vec2(0, -(i - 1)))
+                            break
+                        end
+                    end
+                end
+                
+            else
+                local t_edge = omax.y - max_height
+                        
+                if nmax.y > omax.y then
+                    obstacle_hit = true
+                elseif nmax.y > t_edge then
+                    for i = 1, nmax.y - t_edge do
+                        if self:_step_actor_y(actor, -1) then
+                            obstacle_hit = true
+                            actor:translate(vec2(0, i - 1))
+                            break
+                        end
+                    end
+                end
+            end
         end
+        
+        ::CONTINUE::
     end
     
     if not obstacle_hit then
         actor:translate(step)
-    end    
+    end
+    
+    return obstacle_hit
 end
 
 function PhysicsWorld:_step_actor_y(actor, sign)
@@ -132,16 +183,47 @@ function PhysicsWorld:_step_actor_y(actor, sign)
     
     for _, obstacle in ipairs(nearby) do
         local omin, omax = obstacle:get_bounding_box()
-        if not intersect.aabb_aabb(rmin, rmax, omin, omax) 
-        and intersect.aabb_aabb(nmin, nmax, omin, omax) then
+        
+        if not intersect.aabb_aabb(nmin, nmax, omin, omax) then
+            goto CONTINUE
+        end
+        
+        local hm = obstacle:get_heightmap()
+        if #hm == 0 and not intersect.aabb_aabb(rmin, rmax, omin, omax) then
             obstacle_hit = true
             break
+        else
+            local x1, x2 = overlap_interval(nmin.x, nmax.x, omin.x, omax.x)
+            local max_height = 0
+            for x = x1, x2 - 1 do
+                max_height = math.max(max_height, obstacle:get_height(x - omin.x))
+            end
+            
+            if obstacle:get_flip_v() then
+                local b_edge = omin.y + max_height
+                if nmin.y < b_edge then
+                    obstacle_hit = true
+                    break
+                end
+            else
+                local t_edge = omax.y - max_height
+                
+                if nmax.y > t_edge then
+                    obstacle_hit = true
+                    break
+                end
+            end
+            
         end
+        
+        ::CONTINUE::
     end
     
     if not obstacle_hit then
         actor:translate(step)
     end    
+    
+    return obstacle_hit
 end
 
 -- Delta must not be 0
@@ -161,9 +243,11 @@ end
 
 function PhysicsWorld:move_actor(actor, delta, cling_dist)
     assert(self:has_collidable(actor), "Actor is not in physics world")
-    assert(actor:isInstanceOf(Actor), "move_actor expects an Actor")
+    assert(actor:isInstanceOf(Actor), "move_actor expects an anctor")
     
     if delta == vec2.zero then return end
+    
+    cling_dist = cling_dist or 0
     
     local x_remainder = delta.x
     local y_remainder = delta.y
@@ -178,29 +262,64 @@ function PhysicsWorld:move_actor(actor, delta, cling_dist)
         
         if next_step_x then
             local capped_step = math.min(step_x, math.abs(x_remainder))
+            local hit = false
             for i = 1, capped_step do
-                self:_step_actor_x(actor, xsign)
+                if self:_step_actor_x(actor, xsign) then
+                    hit = true
+                    actor.on_wall = true
+                    break
+                end
+                
+                if actor.on_ground or actor.on_ground_prev and cling_dist > 0 then
+                    local clung = false
+                    
+                    for j = 1, cling_dist + 1 do
+                        if self:_step_actor_y(actor, 1) then
+                            clung = true
+                            break
+                        end
+                    end
+                    
+                    if clung then
+                        actor.on_ground = true
+                    else
+                        actor:translate(vec2(0, -(cling_dist + 1)))
+                    end
+                end
+                
             end
-            x_remainder = x_remainder - capped_step * xsign
-        
+            
+            if hit then
+                x_remainder = 0
+            else
+                x_remainder = x_remainder - capped_step * xsign
+            end
+            
         else
             local capped_step = math.min(step_y, math.abs(y_remainder))
+            local hit = false
             for i = 1, capped_step do
-                self:_step_actor_y(actor, ysign)
+                if self:_step_actor_y(actor, ysign) then
+                    hit = true
+                    break
+                end
             end
-            y_remainder = y_remainder - capped_step * ysign
+            if hit then
+                y_remainder = 0
+                if ysign == 1 then
+                    actor.on_ground = true
+                elseif ysign == -1 then
+                    actor.on_ceil = true
+                end
+                
+            else
+                y_remainder = y_remainder - capped_step * ysign
+            end
         end
         
         next_step_x = not next_step_x
     end
-    
-    
-    
-    
-    
-   
-   
-   
+
 end
 
 function PhysicsWorld:move_obstacle(obstacle, delta)
@@ -212,11 +331,6 @@ function PhysicsWorld:move_obstacle(obstacle, delta)
     
 end
 
-function PhysicsWorld:clear()
-
-    self.collidables = {}
-end
-
 -- Updates cached positions without checking for any intersections
 function PhysicsWorld:set_collidable_position(collidable, x, y) 
     
@@ -224,33 +338,12 @@ end
 
 function PhysicsWorld:debug_draw()
     -- Draw cells
+    --self.obstacle_shash:debug_draw()
     
     -- Draw collision boxes
     for collidable in pairs(self.collidables) do
-        if collidable:isInstanceOf(Actor) then
-            local rectmin, rectmax = collidable:get_bounding_box()
-            local dim = rectmax - rectmin
-            
-            love.graphics.push("all")
-            love.graphics.setColor(160/255, 201/255, 115/255, 0.3)
-            love.graphics.rectangle("fill", rectmin.x, rectmin.y, dim.x, dim.y)
-            love.graphics.pop()
-        elseif collidable:isInstanceOf(Obstacle) then
-        
-            -- TODO: Draw heightmap
-            local rectmin, rectmax = collidable:get_bounding_box()
-            local dim = rectmax - rectmin
-            
-            love.graphics.push("all")
-            love.graphics.setColor(210/255, 165/255, 242/255, 0.3)
-            love.graphics.rectangle("fill", rectmin.x, rectmin.y, dim.x, dim.y)
-            love.graphics.pop()
-        
-        
-        end
+        if collidable.draw_collision then collidable:draw_collision() end
     end
-    
-    
 end
 
 return PhysicsWorld

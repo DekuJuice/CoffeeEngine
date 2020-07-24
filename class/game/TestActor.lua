@@ -18,9 +18,9 @@ function TestActor:physics_update(dt)
     end
     
     if l and not r then
-        vel.x = -200
+        vel.x = -60
     elseif r and not l then
-        vel.x = 200
+        vel.x = 60
     end
     
     vel = vel * dt

@@ -24,7 +24,10 @@ Node:define_get_set("edit_mode")
 -- If node was instanced, the scene root will have its filename set to the file it was instanced from
 Node:define_get_set("filename")
 
-Node:export_var("name", "string", {filter = validate_node_name, merge_mode = "merge_ends"})
+Node:export_var("name", "string", 
+    {filter = function(_, name) return validate_node_name(name) end, 
+    merge_mode = "merge_ends"
+    })
 
 Node:binser_register()
 
@@ -94,6 +97,10 @@ function Node:_set_tree(tree)
 
     for _,child in ipairs(self:get_children()) do
         child:_set_tree(tree)
+    end
+    
+    if tree then
+        self:event("ready")
     end
 end
 

@@ -2,8 +2,6 @@ local Object = require("class.engine.Object")
 
 local TreeView = Object:subclass("TreeView")
 
-TreeView:define_signal("menu_button_pressed")
-
 TreeView:define_get_set("modal")
 TreeView:define_get_set("window_name")
 TreeView:define_get_set("select_leaf_only")
@@ -101,8 +99,8 @@ function TreeView:display(old_selection)
         imgui.SetColumnWidth(-1, w - self.display_extra_width)
         
     end
-        
-    local stack = { self:get_root() }
+    local root = self:get_root()
+    local stack = { root }
     while #stack > 0 do
         local node = table.remove(stack)
         if node == "pop" then
@@ -118,6 +116,10 @@ function TreeView:display(old_selection)
                 
             if is_leaf then
                 table.insert(tree_node_flags, "ImGuiTreeNodeFlags_Leaf")
+            end
+            
+            if node == root then
+                table.insert(tree_node_flags, "ImGuiTreeNodeFlags_DefaultOpen")
             end
                 
             if old_selection then

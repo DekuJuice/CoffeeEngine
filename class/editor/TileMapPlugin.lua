@@ -383,11 +383,12 @@ function TileMapPlugin:draw()
         
         rectmin = editor:transform_to_screen(rectmin)
         rectmax = editor:transform_to_screen(rectmax)
+        love.graphics.push("all")
         love.graphics.setColor(118/255, 207/255, 255/255, 0.18)
         love.graphics.rectangle("fill", rectmin.x, rectmin.y, rectmax.x - rectmin.x, rectmax.y - rectmin.y)
         love.graphics.setColor(118/255, 207/255, 255/255, 1)
         love.graphics.rectangle("line", rectmin.x, rectmin.y, rectmax.x - rectmin.x, rectmax.y - rectmin.y)
-    
+        love.graphics.pop()
     end
 end
 

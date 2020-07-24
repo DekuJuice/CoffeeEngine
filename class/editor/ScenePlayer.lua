@@ -62,13 +62,36 @@ function ScenePlayer:draw()
     end
 
     self.open = window_open
-    if not self.open then
+    if not self.open then   
         self.player_tree:set_root(nil)
     end
 
 
 end
 
+for _,callback in ipairs({
+    "mousepressed",
+    "mousereleased",
+    "mousemoved",
+    "textinput",
+    "keypressed",
+    "keyreleased",
+    "joystickpressed",
+    "joystickreleased",
+    "joystickaxis",
+    "joystickhat",
+    "wheelmoved"
+}) do
+
+    ScenePlayer[callback] = function(self, ...)
+        if self.open then
+            self.player_tree[callback](self.player_tree, ...)            
+            return true
+        end
+        return false
+    end
+
+end
 
 
 return ScenePlayer

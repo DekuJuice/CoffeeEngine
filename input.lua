@@ -126,7 +126,6 @@ function module.keypressed(key, scan, isrepeat)
             if not module.action_is_down(name) then
                 a.pressed = true
                 module.actionpressed(name)
-
             end
             a.strength = 1.0
         end

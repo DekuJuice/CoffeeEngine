@@ -39,7 +39,6 @@ function module:_remove_from_cells(obj)
     
     local x1, y1 = self:get_cell_position(e[1], e[2])
     local x2, y2 = self:get_cell_position(e[1] + e[3], e[2] + e[4])
-    
     for x = x1, x2 do
         for y = y1, y2 do
             local key = get_key(x, y)
@@ -51,11 +50,13 @@ function module:_remove_from_cells(obj)
             else
                 for i,v in ipairs(cell) do
                     if v == obj then
-                        cell[i] = cell[n]                         
+                        cell[i] = cell[n]       
+                        cell[n] = nil
                         break
                     end
                 end
             end
+            
         end
     end
 end
@@ -122,6 +123,25 @@ function module:get_nearby_objects(obj)
     local x, y, w, h = e[1], e[2], e[3], e[4]
     
     return self:get_in_rect(x, y, w, h)
+end
+
+function module:clear()
+    self.cells = {}
+    self.objects = {}
+end
+
+function module:debug_draw()
+    for k,cell in pairs(self.cells) do
+        local kn = tonumber(k)
+        local x = kn % 1e7
+        local y = math.floor(kn / 1e7)
+        
+        local dx = x * self.cellsize
+        local dy = y * self.cellsize
+        
+        love.graphics.rectangle("line", dx, dy, self.cellsize, self.cellsize)
+        love.graphics.print(("%d, %d : %d"):format(x, y, #cell), dx + 4, dy + 4)
+    end
 end
 
 return module

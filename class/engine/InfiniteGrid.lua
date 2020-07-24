@@ -9,6 +9,7 @@ InfiniteGrid:export_var("chunks", "data")
 InfiniteGrid:export_var("chunk_index_map", "data")
 
 InfiniteGrid:define_get_set("autoremove_chunks")
+InfiniteGrid:binser_register()
 
 -- Map data is stored in 16x16 chunks,
 -- centered around the TileMap.
@@ -29,8 +30,6 @@ function InfiniteGrid:initialize()
     self.chunk_index_map = {}
     self.autoremove_chunks = true
 end
-
-InfiniteGrid:binser_register()
 
 function InfiniteGrid:get_chunk_length()
     return CHUNK_LENGTH

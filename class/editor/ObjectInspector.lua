@@ -89,25 +89,61 @@ function ObjectInspector:_draw_property_widget(obj, ep)
         changed, new_val = imgui.Checkbox("##Checkbox", val)
         finalized = changed
     elseif ptype == "bitmask" then
-        local bits = editor_hints.bits or 31
-        for i = 1, bits do
-            local b = 2^(i - 1)
-            local checked = bit.band(b, val) == b
+    
+        if imgui.CollapsingHeader("Bitmask") then
+            local bits = editor_hints.bits or 31
+            for i = 1, bits do
+                local b = 2^(i - 1)
+                local checked = bit.band(b, val) == b
+                if imgui.Checkbox(("%d##bit%d"):format(i-1,i), checked) then
+                
+                    new_val = bit.bxor(val, b)
+                
+                    finalized = true
+                end
+            end
         
-            if imgui.Checkbox(("##bit%d"):format(i), checked) then
+        end
+    elseif ptype == "array" then
+        if imgui.CollapsingHeader("Array") then
             
-                new_val = bit.bxor(val, b)
+            local new = table.copy(val)
             
+            if imgui.Button(IconFont.MINUS) then
+                if table.remove(new) ~= nil then
+                    changed = true
+                    finalized = true
+                end
+            end
+            
+            imgui.SameLine()
+            
+            if imgui.Button(IconFont.PLUS) then
+                table.insert(new, 0)
+                changed = true
                 finalized = true
             end
+                        
+            imgui.SameLine()
+            local n = #new
+            imgui.Text(("Count: %d"):format(n))
             
-            if i % 8 ~= 0 then
-                imgui.SameLine()
+            for i = 1, n do
+                local v = new[i]
+                local fc, nv = imgui.DragInt(("##%d"):format(i), v)
+                
+                new[i] = nv
+                
+                changed = fc or changed
+                finalized = imgui.IsItemDeactivatedAfterEdit() or finalized
+                
+            end
+            
+            if finalized or changed then
+                new_val = new
             end
         end
-
-
-
+        
     elseif ptype == "resource" then
         if imgui.Button("Select") then
             self.resource_selector:set_open(true)
@@ -161,7 +197,7 @@ function ObjectInspector:_draw_property_widget(obj, ep)
     
     imgui.PopID()
 
-    if filter and not (filter(new_val))  then
+    if filter and not (filter(obj, new_val))  then
         new_val = val
     end
     

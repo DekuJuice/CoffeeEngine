@@ -189,4 +189,40 @@ function TileMap:transform_to_world(cell)
     return cell * self.tile_size + gpos    
 end
 
+function TileMap:draw_collision()
+    local visible_chunks = self:calculate_visible_chunks()
+
+    local gpos = self:get_global_position()
+    local chunk_size = self:get_chunk_size()
+    local chunk_length = self.tile_data:get_chunk_length()
+
+    love.graphics.push("all")
+    love.graphics.setColor(210/255, 165/255, 242/255, 0.3)
+    love.graphics.setLineStyle("rough")
+    
+    for _, cpos in ipairs(visible_chunks) do
+        local key = self.tile_data:get_chunk_key(cpos:unpack())
+        local index = self.tile_data:get_chunk_index(key)
+        local chunk = self.tile_data:get_chunk(index)
+        
+        for x = 1, chunk_length do
+            for y = 1, chunk_length do
+                
+                local t = chunk[ (x - 1) % chunk_length + (y - 1) * chunk_length + 1]
+                if t and t > 0 then
+                    love.graphics.rectangle("fill", 
+                        cpos.x * chunk_size + gpos.x + (x - 1) * self.tile_size, 
+                        cpos.y * chunk_size + gpos.y + (y - 1) * self.tile_size,
+                        self.tile_size,
+                        self.tile_size)
+                        
+                end
+            end
+        end
+        
+    end
+    
+    love.graphics.pop()
+end
+
 return TileMap

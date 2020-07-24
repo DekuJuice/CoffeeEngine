@@ -24,7 +24,7 @@ function love.conf(t)
     t.modules.system = true             -- Enable the system module (boolean)
     t.modules.thread = true             -- Enable the thread module (boolean)
     t.modules.timer = true              -- Enable the timer module (boolean), Disabling it will result 0 delta time in love.update
-    t.modules.touch = false              -- Enable the touch module (boolean)
+    t.modules.touch = false             -- Enable the touch module (boolean)
     t.modules.video = false             -- Enable the video module (boolean)
     
     -- Window creation done manually

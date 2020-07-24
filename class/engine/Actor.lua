@@ -16,18 +16,30 @@ function Actor:initialize()
     Collidable.initialize(self)
     self.aabb_extents = vec2(8, 16)
     self.aabb_offset = vec2(0, 0)
-    
+
+
     self.on_ground = false
     self.on_ceil = false
     self.on_wall = false
-    self.on_slope = false
+
+    self.on_ground_prev = false
+
 end
 
 function Actor:move_and_collide(delta, cling_dist)
     local world = self:get_physics_world()
     assert(world, "Actor must be in a tree")
-    
+
+
+    self.on_ground_prev = self.on_ground
+
+
+    self.on_ground = false
+    self.on_ceil = false
+    self.on_wall = false
+
     world:move_actor(self, delta, cling_dist)
+
 end
 
 function Actor:get_bounding_box()
@@ -45,6 +57,16 @@ end
 function Actor:hit_rect(rmin, rmax)
     local bmin, bmax = self:get_bounding_box()
     return intersect.aabb_aabb(rmin, rmax, bmin, bmax)
+end
+
+function Actor:draw_collision()
+    local rectmin, rectmax = self:get_bounding_box()
+    local dim = rectmax - rectmin
+
+    love.graphics.push("all")
+    love.graphics.setColor(160/255, 201/255, 115/255, 0.3)
+    love.graphics.rectangle("fill", rectmin.x, rectmin.y, dim.x, dim.y)
+    love.graphics.pop()
 end
 
 return Actor
