@@ -39,10 +39,6 @@ function PhysicsWorld:initialize()
     -- 2 or 3 collidable layers, we'll just check all of them instead of bothering with spatial hashing it
     self.tilemaps = {}
     
-    
-    
-    
-    
 end
 
 function PhysicsWorld:has_collidable(collidable)
@@ -100,6 +96,8 @@ function PhysicsWorld:remove_collidable(collidable)
     end 
 end
 
+
+
 function PhysicsWorld:_step_actor_x(actor, sign)
     local p = actor:get_position()
     local step = vec2(sign, 0)
@@ -107,6 +105,22 @@ function PhysicsWorld:_step_actor_x(actor, sign)
     
     local nmin, nmax = rmin + step, rmax + step
     local nearby = self.obstacle_shash:get_nearby_in_rect( nmin.x, nmin.y, (nmax - nmin):unpack() ) 
+    local nearby_tiles = {}
+    
+    for _, tilemap in ipairs(self.tilemaps) do
+        if tilemap:get_collision_enabled() then
+            local t = tilemap:get_obstacles_in_rect(
+                tilemap:transform_to_map(nmin),
+                tilemap:transform_to_map(nmax),
+                true
+            )
+            
+            for _,o in ipairs(t) do
+                table.insert(nearby, o)
+                table.insert(nearby_tiles, o)
+            end
+        end
+    end
     
     local obstacle_hit = false
     
@@ -168,6 +182,11 @@ function PhysicsWorld:_step_actor_x(actor, sign)
         actor:translate(step)
     end
     
+    for _, o in ipairs(nearby_tiles) do
+        TileMap:pool_push_obstacle(o)
+    end
+    
+    
     return obstacle_hit
 end
 
@@ -178,6 +197,22 @@ function PhysicsWorld:_step_actor_y(actor, sign)
     
     local nmin, nmax = rmin + step, rmax + step
     local nearby = self.obstacle_shash:get_nearby_in_rect( nmin.x, nmin.y, (nmax - nmin):unpack() ) 
+    local nearby_tiles = {}
+    
+    for _, tilemap in ipairs(self.tilemaps) do
+        if tilemap:get_collision_enabled() then
+            local t = tilemap:get_obstacles_in_rect(
+                tilemap:transform_to_map(nmin),
+                tilemap:transform_to_map(nmax),
+                true
+            )
+            
+            for _,o in ipairs(t) do
+                table.insert(nearby, o)
+                table.insert(nearby_tiles, o)
+            end
+        end
+    end
     
     local obstacle_hit = false
     
@@ -222,6 +257,10 @@ function PhysicsWorld:_step_actor_y(actor, sign)
     if not obstacle_hit then
         actor:translate(step)
     end    
+    
+    for _, o in ipairs(nearby_tiles) do
+        TileMap:pool_push_obstacle(o)
+    end
     
     return obstacle_hit
 end

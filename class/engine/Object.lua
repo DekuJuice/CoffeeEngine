@@ -59,9 +59,12 @@ Object.static.binser_register = function(class)
     if not rawget(class.static, "_deserialize") then
         class.static._deserialize = function(data)
             local instance = class()
-            for k,v in pairs(data) do
-                local setter = ("set_%s"):format(k)
-                instance[setter](instance, v)
+            for _,v in ipairs(data) do
+                local key = v[1]
+                local val = v[2]
+                
+                local setter = ("set_%s"):format(key)
+                instance[setter](instance, val)
             end
             return instance
         end
@@ -82,7 +85,7 @@ function Object:_serialize()
             if exported then
                 for _, ep in ipairs(exported) do
                     local getter = ("get_%s"):format(ep.name)
-                    res[ep.name] = self[getter](self)
+                    table.insert(res, {ep.name, self[getter](self)})
                 end
             end
         end        

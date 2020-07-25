@@ -281,6 +281,10 @@ function Editor:transform_to_screen(point)
     return self:get_active_view():transform_to_viewport(point) + self.view_pos
 end
 
+function Editor:get_inspected_resource()
+    return self.inspected_resource
+end
+
 -- IMGUI stuff
 
 function Editor:_menu_item(name, checked)

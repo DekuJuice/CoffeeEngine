@@ -31,9 +31,10 @@ end
 
 function NodeSelector:is_leaf(class)
     
-    -- Will return false if there are any subclasses
-    for _ in pairs(class.subclasses) do 
-        return false
+    for class in pairs(class.subclasses) do 
+        if not class.static.dontlist then
+            return false
+        end
     end
 
     return true

@@ -25,6 +25,7 @@ require("enginelib.mathplus") -- Extensions to math library
 
 utf8 = require("utf8") -- utf8 lib not loaded by default
 vec2 = require("enginelib.vec2") -- 2d vectors
+bit = require("bit") -- Luajit bitop library
 
 -- MISC SETUP --
 do -- Register custom (non-class) types to binser

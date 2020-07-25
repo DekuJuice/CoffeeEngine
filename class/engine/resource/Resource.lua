@@ -30,9 +30,11 @@ Resource.static.binser_register = function(class)
                 return get_resource(filepath_or_data)        
             else
                 local instance = class()
-                for k,v in pairs(filepath_or_data) do
-                    local setter = ("set_%s"):format(k)
-                    instance[setter](instance, v)
+                for _,v in ipairs(filepath_or_data) do
+                    local key = v[1]
+                    local val = v[2]
+                    local setter = ("set_%s"):format(key)
+                    instance[setter](instance, val)
                 end
                 return instance
             end

@@ -15,7 +15,7 @@ function CollidablePlugin:initialize()
 end
 
 function CollidablePlugin:enter_tree()
-    local scene = self:get_parent():get_active_scene()
+    --[[local scene = self:get_parent():get_active_scene()
     
     local node = require("class.engine.Node")()
     scene:add_node(nil, node)
@@ -55,7 +55,7 @@ function CollidablePlugin:enter_tree()
     o6:set_aabb_extents(vec2(8, 8))
     o6:set_position(vec2(48, 216))
     o6:set_heightmap({16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1})
-    scene:add_node("/Node", o6)
+    scene:add_node("/Node", o6)]]--
 end
 
 
