@@ -14,7 +14,16 @@ function Obstacle:initialize()
     Collidable.initialize(self)
     
     self.aabb_extents = vec2(32, 8)
-    self.heightmap = {}    
+    self.heightmap = {}
+    self.flip_h = false
+    self.flip_v = false
+end
+
+function Obstacle:move_and_collide(delta)
+    local world = self:get_physics_world()
+    assert(world, "Obstacle must be in a tree")
+
+    world:move_obstacle(self, delta)
 end
 
 function Obstacle:get_bounding_box()

@@ -29,7 +29,7 @@ function module:_add_to_cells(obj, x, y, w, h)
         for y = y1, y2 do
             local key = get_key(x, y)
             self.cells[key] = self.cells[key] or {}
-            table.insert(self.cells[key], obj)            
+            table.insert(self.cells[key], obj)                        
         end
     end
 end
@@ -128,20 +128,6 @@ end
 function module:clear()
     self.cells = {}
     self.objects = {}
-end
-
-function module:debug_draw()
-    for k,cell in pairs(self.cells) do
-        local kn = tonumber(k)
-        local x = kn % 1e7
-        local y = math.floor(kn / 1e7)
-        
-        local dx = x * self.cellsize
-        local dy = y * self.cellsize
-        
-        love.graphics.rectangle("line", dx, dy, self.cellsize, self.cellsize)
-        love.graphics.print(("%d, %d : %d"):format(x, y, #cell), dx + 4, dy + 4)
-    end
 end
 
 return module

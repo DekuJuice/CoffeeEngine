@@ -38,7 +38,6 @@ function PhysicsWorld:initialize()
     -- Tilemaps are a special case, since there likely won't be more than
     -- 2 or 3 collidable layers, we'll just check all of them instead of bothering with spatial hashing it
     self.tilemaps = {}
-    
 end
 
 function PhysicsWorld:has_collidable(collidable)
@@ -96,7 +95,7 @@ function PhysicsWorld:remove_collidable(collidable)
     end 
 end
 
-function PhysicsWorld:_step_actor_x(actor, sign)
+function PhysicsWorld:_step_actor_x(actor, sign, exclude)
     local p = actor:get_position()
     local step = vec2(sign, 0)
     local rmin, rmax = actor:get_bounding_box() -- old bounding box
@@ -127,8 +126,7 @@ function PhysicsWorld:_step_actor_x(actor, sign)
     for _, obstacle in ipairs(nearby) do
         local omin, omax = obstacle:get_bounding_box()
         
-        -- Can't possibly be intersecting
-        if not intersect.aabb_aabb(nmin, nmax, omin, omax) then
+        if obstacle == exclude or not intersect.aabb_aabb(nmin, nmax, omin, omax) then
             goto CONTINUE
         end
         
@@ -247,11 +245,10 @@ function PhysicsWorld:_step_actor_x(actor, sign)
         TileMap:pool_push_obstacle(o)
     end
     
-    
     return obstacle_hit
 end
 
-function PhysicsWorld:_step_actor_y(actor, sign)
+function PhysicsWorld:_step_actor_y(actor, sign, exclude)
     local p = actor:get_position()
     local step = vec2(0, sign)
     local rmin, rmax = actor:get_bounding_box()
@@ -280,7 +277,7 @@ function PhysicsWorld:_step_actor_y(actor, sign)
     for _, obstacle in ipairs(nearby) do
         local omin, omax = obstacle:get_bounding_box()
         
-        if not intersect.aabb_aabb(nmin, nmax, omin, omax) then
+        if obstacle == exclude or not intersect.aabb_aabb(nmin, nmax, omin, omax) then
             goto CONTINUE
         end
         
@@ -380,13 +377,13 @@ local function get_step_size(delta)
     return math.ceil(ax / ay), math.ceil(ay / ax)
 end
 
-function PhysicsWorld:move_actor(actor, delta, cling_dist)
+function PhysicsWorld:move_actor(actor, delta)
     assert(self:has_collidable(actor), "Actor is not in physics world")
     assert(actor:isInstanceOf(Actor), "move_actor expects an anctor")
     
     if delta == vec2.zero then return end
     
-    cling_dist = cling_dist or 0
+    local cling_dist = actor:get_cling_dist()
     
     local x_remainder = delta.x
     local y_remainder = delta.y
@@ -458,27 +455,142 @@ function PhysicsWorld:move_actor(actor, delta, cling_dist)
         
         next_step_x = not next_step_x
     end
+    
+    self:update_collidable_position(actor)
 
+end
+
+function PhysicsWorld:_step_obstacle_x(obstacle, sign)
+    local step = vec2(sign, 0)
+    
+    local rmin, rmax = obstacle:get_bounding_box()
+    local nmin, nmax = rmin + step, rmax + step
+    local dim = rmax - rmin
+    
+    local nearby = self.actor_shash:get_nearby_in_rect(rmin.x, rmin.y, dim:unpack())
+    
+    for _, actor in ipairs(nearby) do
+        local amin, amax = actor:get_bounding_box()
+
+        local x1, x2 = overlap_interval(rmin.x, rmax.x, amin.x, amax.x)
+        local y1, y2 = overlap_interval(rmin.y, rmax.y, amin.y, amax.y)
+        
+        if x2 - x1 > 0 then
+        
+            if actor:get_stick_moving_ground() and amax.y == rmin.y  then
+                self:_step_actor_x(actor, sign, obstacle)
+            elseif actor:get_stick_moving_ceil() and amin.y == rmax.y then
+                self:_step_actor_x(actor, sign, obstacle)
+            end
+        elseif y2 - y1 > 0 then
+            
+            if amin.x == rmax.x and ( sign == 1 or actor:get_stick_moving_wall_left() ) then
+                self:_step_actor_x(actor, sign, obstacle)
+            elseif amax.x == rmin.x and ( sign == -1 or actor:get_stick_moving_wall_right() ) then
+                self:_step_actor_x(actor, sign, obstacle)
+            end
+            
+        end
+    end
+    
+    
+    obstacle:translate(step)
+end
+
+function PhysicsWorld:_step_obstacle_y(obstacle, sign)
+    local step = vec2(0, sign)
+    
+    local rmin, rmax = obstacle:get_bounding_box()
+    local nmin, nmax = rmin + step, rmax + step
+    local dim = rmax - rmin
+    
+    local nearby = self.actor_shash:get_nearby_in_rect(rmin.x, rmin.y, dim:unpack())
+
+    for _, actor in ipairs(nearby) do
+        local amin, amax = actor:get_bounding_box()
+
+        local x1, x2 = overlap_interval(rmin.x, rmax.x, amin.x, amax.x)
+        local y1, y2 = overlap_interval(rmin.y, rmax.y, amin.y, amax.y)
+        
+        if x2 - x1 > 0 then
+        
+            if amax.y == rmin.y and (sign == -1 or actor:get_stick_moving_ground() )  then
+                self:_step_actor_y(actor, sign, obstacle)
+            elseif amin.y == rmax.y and (sign == 1 or actor:get_stick_moving_ceil() ) then
+                self:_step_actor_y(actor, sign, obstacle)
+            end
+        elseif y2 - y1 > 0 then
+            
+            if amin.x == rmax.x and actor:get_stick_moving_wall_left() then
+                self:_step_actor_y(actor, sign, obstacle)
+            elseif amax.x == rmin.x and actor:get_stick_moving_wall_right() then
+                self:_step_actor_y(actor, sign, obstacle)
+            end
+            
+        end
+        
+    end
+    
+    obstacle:translate(step)
 end
 
 function PhysicsWorld:move_obstacle(obstacle, delta)
     assert(self:has_collidable(obstacle), "Obstacle is not in physics world")
     assert(obstacle:isInstanceOf(Obstacle), "move_obstacle expects an obstacle")
     
+    if delta == vec2.zero then return end
+
+    local x_remainder = delta.x
+    local y_remainder = delta.y
     
+    local xsign = math.sign(delta.x)
+    local ysign = math.sign(delta.y)
     
+    local step_x, step_y = get_step_size(delta)
     
+    local next_step_x = x_remainder ~= 0
+    while math.abs(x_remainder) + math.abs(y_remainder) > 0 do
+        if next_step_x then
+            local capped_step = math.min(step_x, math.abs(x_remainder))
+            
+            for i = 1, capped_step do
+                self:_step_obstacle_x(obstacle, xsign)
+            end
+            
+            x_remainder = x_remainder - capped_step * xsign
+        else
+            local capped_step = math.min(step_y, math.abs(y_remainder))
+            
+            for i = 1, capped_step do
+                self:_step_obstacle_y(obstacle, ysign)
+            end
+            
+            y_remainder = y_remainder - capped_step * ysign
+        end
+        
+        next_step_x = not next_step_x
+    end
+    
+    self:update_collidable_position(obstacle)
 end
 
 -- Updates cached positions without checking for any intersections
-function PhysicsWorld:set_collidable_position(collidable, x, y) 
+function PhysicsWorld:update_collidable_position(collidable)
+    assert(self:has_collidable(collidable))
+
+    local rmin, rmax = collidable:get_bounding_box()
+    local dim = rmax - rmin
     
+    if collidable:isInstanceOf(Actor) then
+        self.actor_shash:update_object(collidable, rmin.x, rmin.y, dim.x, dim.y)
+    elseif collidable:isInstanceOf(Obstacle) then
+        self.obstacle_shash:update_object(collidable, rmin.x, rmin.y, dim.x, dim.y)
+    elseif collidable:isInstanceOf(Area) then
+        self.area_shash:update_object(collidable, rmin.x, rmin.y, dim.x, dim.y)
+    end
 end
 
 function PhysicsWorld:debug_draw()
-    -- Draw cells
-    --self.obstacle_shash:debug_draw()
-    
     -- Draw collision boxes
     for collidable in pairs(self.collidables) do
         if collidable.draw_collision then collidable:draw_collision() end

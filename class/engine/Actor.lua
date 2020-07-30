@@ -13,13 +13,17 @@ Actor:define_get_set("on_wall")
 Actor:define_get_set("on_slope")
 Actor:define_get_set("jump_down_one_way")
 
+Actor:define_get_set("stick_moving_ground")
+Actor:define_get_set("stick_moving_wall_left")
+Actor:define_get_set("stick_moving_wall_right")
+Actor:define_get_set("stick_moving_ceil")
+
 Actor:binser_register()
 
 function Actor:initialize()
     Collidable.initialize(self)
     self.aabb_extents = vec2(8, 16)
     self.aabb_offset = vec2(0, 0)
-
     self.cling_dist = 1
     self.climb_dist = 1
 
@@ -29,10 +33,14 @@ function Actor:initialize()
     self.on_ground_prev = false
     
     self.jump_down_one_way = false
+    self.stick_moving_ground = true
+    self.stick_moving_wall_left = false
+    self.stick_moving_wall_right = false
+    self.stick_moving_ceil = false
 
 end
 
-function Actor:move_and_collide(delta, cling_dist)
+function Actor:move_and_collide(delta)
     local world = self:get_physics_world()
     assert(world, "Actor must be in a tree")
 
@@ -42,7 +50,7 @@ function Actor:move_and_collide(delta, cling_dist)
     self.on_ceil = false
     self.on_wall = false
 
-    world:move_actor(self, delta, cling_dist)
+    world:move_actor(self, delta)
     
     self.jump_down_one_way = false
 

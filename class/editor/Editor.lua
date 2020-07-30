@@ -616,6 +616,13 @@ function Editor:draw()
     self:_draw_resource_selector()
 
     console:display(console_output)
+
+
+    -- undo/redo stack debug
+    --[[local scene = self:get_active_scene()
+    for i,v in ipairs(scene.undo_stack) do
+        love.graphics.print(v.name, 200, 200 + 15 * i)
+    end]]--
 end
 
 -- Callbacks --
