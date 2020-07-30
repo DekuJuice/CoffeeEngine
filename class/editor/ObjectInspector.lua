@@ -104,7 +104,7 @@ function ObjectInspector:_draw_property_widget(obj, ep)
             end
         
         end
-    elseif ptype == "array" then
+    elseif ptype == "num_array" then
         if imgui.CollapsingHeader("Array") then
             
             local new = table.copy(val)
@@ -130,6 +130,7 @@ function ObjectInspector:_draw_property_widget(obj, ep)
             
             for i = 1, n do
                 local v = new[i]
+                
                 local fc, nv = imgui.DragInt(("##%d"):format(i), v)
                 
                 new[i] = nv
@@ -277,6 +278,5 @@ end
 function ObjectInspector:get_changed_var_value()
     return self.new_val
 end
-
 
 return ObjectInspector

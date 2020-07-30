@@ -4,8 +4,7 @@ local Collidable = require("class.engine.Collidable")
 local Obstacle = Collidable:subclass("Obstacle")
 
 Obstacle:export_var("aabb_extents", "vec2", {speed = 0.2, merge_mode = "merge_ends", min = 0, max = math.huge} )
-Obstacle:export_var("one_way", "bool")
-Obstacle:export_var("heightmap", "array", {merge_mode = "merge_ends"})
+Obstacle:export_var("heightmap", "num_array", {merge_mode = "merge_ends"})
 Obstacle:export_var("flip_h", "bool")
 Obstacle:export_var("flip_v", "bool")
 
@@ -15,7 +14,6 @@ function Obstacle:initialize()
     Collidable.initialize(self)
     
     self.aabb_extents = vec2(32, 8)
-    self.one_way = false
     self.heightmap = {}    
 end
 
@@ -62,17 +60,34 @@ function Obstacle:draw_collision()
     local hm = self:get_heightmap()
     local count = #hm
     if count > 0 then
-        for x = 0, dim.x - 1 do
-            local h = self:get_height(x)
-            
-            if self.flip_v then
-                love.graphics.line(rectmin.x + x + 0.5, rectmin.y, rectmin.x + x + 0.5, rectmin.y + h)
-            else
-                love.graphics.line(rectmin.x + x + 0.5, rectmax.y - h, rectmin.x + x + 0.5, rectmax.y)
+        if self:has_tag("one_way") then
+            for x = 0, dim.x - 1 do
+                local h = self:get_height(x)
+                if self.flip_v then
+                    
+                    love.graphics.rectangle("fill", rectmin.x + x , rectmin.y + h, 1, 1)
+                else
+                    love.graphics.rectangle("fill", rectmin.x + x , rectmax.y - h, 1, 1)
+                end
             end
+        else
+        
+            for x = 0, dim.x - 1 do
+                local h = self:get_height(x)
+                if self.flip_v then
+                    love.graphics.line(rectmin.x + x + 0.5, rectmin.y, rectmin.x + x + 0.5, rectmin.y + h)
+                else
+                    love.graphics.line(rectmin.x + x + 0.5, rectmax.y - h, rectmin.x + x + 0.5, rectmax.y)
+                end
+            end
+            
         end
     else
-        love.graphics.rectangle("fill", rectmin.x, rectmin.y, dim.x, dim.y)
+        if self:has_tag("one_way") then
+            love.graphics.line(rectmin.x, rectmin.y, rectmax.x, rectmin.y)
+        else
+            love.graphics.rectangle("fill", rectmin.x, rectmin.y, dim.x, dim.y)
+        end
     end
     love.graphics.pop()
 end

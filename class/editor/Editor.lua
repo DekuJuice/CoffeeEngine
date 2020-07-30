@@ -44,7 +44,7 @@ local function draw_grid(origin, rect, grid_size)
     local w, h = rect:unpack()
     local ox, oy = origin:unpack()
     local cellw, cellh = grid_size:unpack()
-    
+
     for x = 0, w, cellw do
         love.graphics.line(x + ox, 0, x + ox, h)
     end
@@ -90,32 +90,6 @@ do
 
 end
 
-function Editor:draw_grid(position, scale, cellsize)
-    local vw, vh = self:get_active_view():get_resolution()
-    if vw <= 0 or vh <= 0 then return end
-    
-    love.graphics.push("all")
-    cellsize =  cellsize * scale
-
-    love.graphics.translate(self.view_pos:unpack())
-    love.graphics.translate(0.5, 0.5)
-    love.graphics.setLineStyle("rough")
-    
-    local origin = -(cellsize + position)
-    origin.x = origin.x % cellsize.x
-    origin.y = origin.y % cellsize.y
-    
-    for x = 0, vw, cellsize.x do
-        love.graphics.line(x + origin.x, 0, x + origin.x, vh)
-    end
-
-    for y = 0, vh, cellsize.y do
-        love.graphics.line(0, y + origin.y, vw, y + origin.y)
-    end
-
-    love.graphics.pop()
-end
-
 function Editor:initialize()
 
     Node.initialize(self, "Editor")
@@ -127,7 +101,7 @@ function Editor:initialize()
     self.dragging = false
     self.view_pos = vec2()
     self.action_dispatcher = ActionDispatcher()
-    
+
     -- Add other components of the editor
     self.resource_tree_view = ResourceTreeView()
     self.resource_tree_view:set_window_name("Resources")
@@ -154,7 +128,16 @@ function Editor:initialize()
 
     -- Add actions
     self.action_dispatcher:add_action("Save", function() 
-            self:save_scene()
+            local model = self:get_active_scene()
+            if not model:get_tree():get_root() then
+                --self:open_alert_modal("The scene must have a root node to be saved.")
+                return
+            end
+            local path = model:get_filepath()
+            if not path then
+                --self:open_save_as_modal()
+                return 
+            end
         end, "ctrl+s")
 
     self.action_dispatcher:add_action("Save As", function()
@@ -184,12 +167,12 @@ function Editor:initialize()
             local scene = self:get_active_scene()
             scene:set_draw_grid( not scene:get_draw_grid() )
         end, "ctrl+g")
-        
+
     self.action_dispatcher:add_action("Toggle Physics Debug", function()
             local scene = self:get_active_scene()
             local tree = scene:get_tree()
             tree:set_debug_draw_physics(not tree:get_debug_draw_physics())
-    end, "ctrl+]")
+        end, "ctrl+]")
 
     self.action_dispatcher:add_action("Recenter View", function()
             self:get_active_view():set_position(vec2(0, 0))
@@ -208,15 +191,15 @@ function Editor:initialize()
         end, "ctrl+shift+n")
 
     self.action_dispatcher:add_action("Play Scene", function()
-        local scene = self:get_active_scene()
-        
-        if not scene:get_tree():get_root() then return end
-        
-        local player = self:get_node("ScenePlayer")
-        local packed_scene = scene:pack()
-        
-        player:play(packed_scene)        
-    end, "f5")
+            local scene = self:get_active_scene()
+
+            if not scene:get_tree():get_root() then return end
+
+            local player = self:get_node("ScenePlayer")
+            local packed_scene = scene:pack()
+
+            player:play(packed_scene)        
+        end, "f5")
 
     -- Add plugins
 
@@ -255,24 +238,6 @@ function Editor:close_scene(index)
     end
 end
 
-function Editor:save_scene()
-    local model = self:get_active_scene()
-
-    if not model:get_tree():get_root() then
-        --self:open_alert_modal("The scene must have a root node to be saved.")
-
-        return
-    end
-
-    local path = model:get_filepath()
-
-    if not path then
-        --self:open_save_as_modal()
-        return 
-    end
-
-end
-
 function Editor:transform_to_world(point)
     return self:get_active_view():transform_to_world(point - self.view_pos)
 end
@@ -285,7 +250,31 @@ function Editor:get_inspected_resource()
     return self.inspected_resource
 end
 
--- IMGUI stuff
+function Editor:draw_grid(position, scale, cellsize)
+    local vw, vh = self:get_active_view():get_resolution()
+    if vw <= 0 or vh <= 0 then return end
+
+    love.graphics.push("all")
+    cellsize =  cellsize * scale
+
+    love.graphics.translate(self.view_pos:unpack())
+    love.graphics.translate(0.5, 0.5)
+    love.graphics.setLineStyle("rough")
+
+    local origin = -(cellsize + position)
+    origin.x = origin.x % cellsize.x
+    origin.y = origin.y % cellsize.y
+
+    for x = 0, vw, cellsize.x do
+        love.graphics.line(x + origin.x, 0, x + origin.x, vh)
+    end
+
+    for y = 0, vh, cellsize.y do
+        love.graphics.line(0, y + origin.y, vw, y + origin.y)
+    end
+
+    love.graphics.pop()
+end
 
 function Editor:_menu_item(name, checked)
     local shortcut = self.action_dispatcher:get_shortcut(name) or ""
@@ -295,11 +284,8 @@ function Editor:_menu_item(name, checked)
     end
 end
 
-function Editor:draw()
-
-    -- Demo window --
-    imgui.ShowDemoWindow() 
-
+-- manu menu bar, toolbar, and tabbar
+function Editor:_draw_top_bars()
     -- Main Menu Bar --
     local menu_bar_height = 0 
 
@@ -337,14 +323,12 @@ function Editor:draw()
         imgui.EndMainMenuBar()
     end
 
-
     -- Tabbar --
     local tab_bar_height = 0
     imgui.SetNextWindowPos(0, menu_bar_height)
     imgui.SetNextWindowSize(love.graphics.getWidth(), 0)
     imgui.PushStyleVar("ImGuiStyleVar_WindowBorderSize", 0)
 
-    
     imgui.Begin("Scenes", true, 
         {
             "ImGuiWindowFlags_NoTitleBar", 
@@ -354,15 +338,15 @@ function Editor:draw()
             "ImGuiWindowFlags_NoDocking",
         }
     )
-    
+
     imgui.PushStyleVar("ImGuiStyleVar_ItemSpacing", 8, 8)
-    
+
     if imgui.BeginTabBar("SceneTabs", {
-        "ImGuiTabBarFlags_Reorderable",
-        "ImGuiTabBarFlags_TabListPopupButton",
-        "ImGuiTabBarFlags_FittingPolicyResizeDown",
-        "ImGuiTabBarFlags_AutoSelectNewTabs"
-    }) then
+            "ImGuiTabBarFlags_Reorderable",
+            "ImGuiTabBarFlags_TabListPopupButton",
+            "ImGuiTabBarFlags_FittingPolicyResizeDown",
+            "ImGuiTabBarFlags_AutoSelectNewTabs"
+            }) then
 
         for i,model in ipairs(self.scene_models) do
             local tabname = ("%d. %s"):format(i, model:get_name())        
@@ -385,22 +369,22 @@ function Editor:draw()
         end
 
         imgui.EndTabBar()
-        
+
         -- Toolbar --
         if imgui.Button( ("%s Play Scene"):format(IconFont.PLAY)) then
             self.action_dispatcher:do_action("Play Scene")
         end
-        
-        
+
+
         imgui.SameLine()
         for _,c in ipairs(self.children) do
             if c.draw_toolbar then
                 c:draw_toolbar()
             end
         end
-        
+
     end
-    
+
     imgui.PopStyleVar(1)
 
     tab_bar_height = select(2, imgui.GetWindowSize())
@@ -408,53 +392,53 @@ function Editor:draw()
     imgui.PopStyleVar()
 
     self.view_pos.y = tab_bar_height + menu_bar_height
+end
 
+function Editor:_draw_scene_nodes()
+    local gdim = vec2(love.graphics.getDimensions())
+    local vdim = gdim - self.view_pos
 
-    do -- Scene Nodes
-        local gdim = vec2(love.graphics.getDimensions())
-        local vdim = gdim - self.view_pos
+    local curmodel = self:get_active_scene()
+    local view = self:get_active_view()
 
-        local curmodel = self:get_active_scene()
-        local view = self:get_active_view()
+    if (vdim.x > 0 and vdim.y > 0) then
 
-        if (vdim.x > 0 and vdim.y > 0) then
-
-            local pw, ph = view:get_resolution()
-            if (pw ~= vdim.x or ph ~= vdim.y) then
-                view:set_resolution(vdim.x, vdim.y)
-            end
-
-            local position = view:get_position()
-            local scale = view:get_scale()
-            -- Scaling for the grid is done manually so that lines are always at full resolution
-            if curmodel:get_draw_grid() then
-                love.graphics.push("all")
-                local minor = curmodel:get_grid_minor()
-                local major = curmodel:get_grid_major()
-                love.graphics.setColor(0.4, 0.4, 0.4, 0.3)
-                self:draw_grid(position, scale, minor)
-                love.graphics.setColor(0.7, 0.7, 0.7, 0.3)
-                self:draw_grid(position, scale, major)
-                love.graphics.pop()
-            end
-            
-            love.graphics.push("all")
-            love.graphics.translate(self.view_pos:unpack())            
-            -- Always draw origin lines
-            love.graphics.setLineStyle("rough")
-            love.graphics.translate(0.5, 0.5)
-            local cx, cy = -position.x, -position.y
-            love.graphics.setColor(1,0,0,0.5)
-            love.graphics.line(0, cy, vdim.x, cy)
-            love.graphics.setColor(0,1,0,0.5)
-            love.graphics.line(cx, 0, cx, vdim.y)
-            love.graphics.pop()
-            
-            curmodel:get_tree():draw(self.view_pos.x, self.view_pos.y, vdim:unpack()) 
+        local pw, ph = view:get_resolution()
+        if (pw ~= vdim.x or ph ~= vdim.y) then
+            view:set_resolution(vdim.x, vdim.y)
         end
-    end
 
-    -- Resource Tree View --
+        local position = view:get_position()
+        local scale = view:get_scale()
+        -- Scaling for the grid is done manually so that lines are always at full resolution
+        if curmodel:get_draw_grid() then
+            love.graphics.push("all")
+            local minor = curmodel:get_grid_minor()
+            local major = curmodel:get_grid_major()
+            love.graphics.setColor(0.4, 0.4, 0.4, 0.3)
+            self:draw_grid(position, scale, minor)
+            love.graphics.setColor(0.7, 0.7, 0.7, 0.3)
+            self:draw_grid(position, scale, major)
+            love.graphics.pop()
+        end
+
+        love.graphics.push("all")
+        love.graphics.translate(self.view_pos:unpack())            
+        -- Always draw origin lines
+        love.graphics.setLineStyle("rough")
+        love.graphics.translate(0.5, 0.5)
+        local cx, cy = -position.x, -position.y
+        love.graphics.setColor(1,0,0,0.5)
+        love.graphics.line(0, cy, vdim.x, cy)
+        love.graphics.setColor(0,1,0,0.5)
+        love.graphics.line(cx, 0, cx, vdim.y)
+        love.graphics.pop()
+
+        curmodel:get_tree():draw(self.view_pos.x, self.view_pos.y, vdim:unpack()) 
+    end
+end
+
+function Editor:_draw_resource_tree_view()
     if self.resource_tree_view:begin_window() then
         if imgui.Button(("%s Create Resource"):format(IconFont.FILE_PLUS) ) then
             self.resource_selector:set_open(true)
@@ -473,124 +457,131 @@ function Editor:draw()
 
     end
     self.resource_tree_view:end_window()
+end
 
+function Editor:_draw_node_tree_view()
     -- Node Tree View
     if self.node_tree_view:begin_window() then
         local model = self:get_active_scene()
         self.node_tree_view:set_scene_model(model)
         self.node_tree_view:display( model:get_selected_nodes() )
         model:set_selected_nodes( self.node_tree_view:get_selection() )
-
-        local focus = imgui.IsWindowFocused({"ImGuiFocusedFlags_RootAndChildWindows"})        
-
+        local focus = imgui.IsWindowFocused({"ImGuiFocusedFlags_RootAndChildWindows"})
         if focus or self.node_tree_view:is_selection_changed() then
             self.show_resource_inspector = false
         end
-
+        
         if self.node_tree_view:is_new_node_selected() then -- Add new node
             local nclass = self.node_tree_view:get_new_node()
             local sel = model:get_selected_nodes()
             local path
             if sel[1] then path = sel[1]:get_absolute_path() end
-
             local instance = nclass()
-
             local cmd = model:create_command("Add Node")
             cmd:add_do_func(function()
                     model:add_node(path, instance)
                     model:set_selected_nodes({instance})            
                 end)
-
             cmd:add_undo_func(function()
                     model:remove_node(instance)
                     model:set_selected_nodes(sel)
                 end)
-
             model:commit_command(cmd)
         end
-
-
+        
+        
+        
+        
     end
-    self.node_tree_view:end_window()
-    self.resource_inspector.open = self.show_inspector
-    self.node_inspector.open = self.show_inspector
+    self.node_tree_view:end_window() 
+end
 
-    -- Resource inspector
-    if self.show_resource_inspector then
-        if self.resource_inspector:begin_window() then
-            self.resource_inspector:display(self.inspected_resource)
-
-            if self.inspected_resource then
-
-                if self.resource_inspector:is_var_changed() then
-                    local k = self.resource_inspector:get_changed_var_name()
-                    local v = self.resource_inspector:get_changed_var_value()
-
-                    local setter = ("set_%s"):format(k)
-                    self.inspected_resource[setter](self.inspected_resource, v)
-                    self.inspected_resource:set_has_unsaved_changes(true)
+function Editor:_draw_resource_inspector()
+    if self.resource_inspector:begin_window() then
+        self.resource_inspector:display(self.inspected_resource)
+        if self.inspected_resource then
+            if self.resource_inspector:is_var_changed() then
+                local k = self.resource_inspector:get_changed_var_name()
+                local v = self.resource_inspector:get_changed_var_value()
+                local setter = ("set_%s"):format(k)
+                self.inspected_resource[setter](self.inspected_resource, v)
+                self.inspected_resource:set_has_unsaved_changes(true)
+            end
+            if self.resource_inspector:is_filepath_changed() then
+                local new_path = self.resource_inspector:get_new_filepath()
+                local ext = self.inspected_resource.class.static.extensions[1]
+                if new_path:match("[^.]+$") ~= ext then
+                    new_path = ("%s.%s"):format(new_path, ext)
                 end
-
-                if self.resource_inspector:is_filepath_changed() then
-                    local new_path = self.resource_inspector:get_new_filepath()
-                    local ext = self.inspected_resource.class.static.extensions[1]
-                    if new_path:match("[^.]+$") ~= ext then
-                        new_path = ("%s.%s"):format(new_path, ext)
-                    end
-
-                    self.inspected_resource:set_filepath(new_path)            
-                end
-
-                if self.resource_inspector:save_pressed() then
-                    save_resource(self.inspected_resource)
-                end
+                self.inspected_resource:set_filepath(new_path)            
+            end
+            if self.resource_inspector:save_pressed() then
+                save_resource(self.inspected_resource)
             end
         end
-        self.resource_inspector:end_window()
+    end
+    self.resource_inspector:end_window()
+end
 
-        if not self.resource_inspector.open then
-            self.show_inspector = false
-        end
-
-        -- Node Inspector
-    else
-        if self.node_inspector:begin_window() then
-            local model = self:get_active_scene()
-            local selected = model:get_selected_nodes()[1]
-            self.node_inspector:display(selected)
-
-            if selected then
-                if self.node_inspector:is_var_changed() then
-                    local name = self.node_inspector:get_changed_var_name()
-                    local v = self.node_inspector:get_changed_var_value()
-                    local old_v = selected[("get_%s"):format(name)](selected)
-                    local ep = selected.class:get_exported_vars()[name]
-                    local merge_mode = ep.editor_hints.merge_mode
-                    if self.node_inspector:is_change_finalized() then
-                        merge_mode = nil
-                    end
-                    local cmd = model:create_command(("Modify %s"):format(name), merge_mode)
-                    
-                    cmd:add_do_var(selected, name, v)
-                    cmd:add_undo_var(selected, name, old_v)
-                    
-                    model:commit_command(cmd)
+function Editor:_draw_node_inspector()
+    if self.node_inspector:begin_window() then
+        local model = self:get_active_scene()
+        local selected = model:get_selected_nodes()[1]
+        self.node_inspector:display(selected)
+        if selected then
+        
+            if self.node_inspector:is_tag_added() then
+                local tag = self.node_inspector:get_tag_arg()
+                local cmd = model:create_command("Add Tag")
+                cmd:add_do_func(function() 
+                    selected:add_tag(tag)
+                end)
+                
+                cmd:add_undo_func(function()
+                    selected:remove_tag(tag)
+                end)
+                
+                model:commit_command(cmd)
+                
+            elseif self.node_inspector:is_tag_removed() then
+                local tag = self.node_inspector:get_tag_arg()
+                local cmd = model:create_command("Remove Tag")
+                cmd:add_do_func(function()
+                    selected:remove_tag(tag)
+                end)
+                
+                cmd:add_undo_func(function()
+                    selected:add_tag(tag)
+                end)
+                
+                model:commit_command(cmd)
+            end        
+        
+            if self.node_inspector:is_var_changed() then
+                local name = self.node_inspector:get_changed_var_name()
+                local v = self.node_inspector:get_changed_var_value()
+                local old_v = selected[("get_%s"):format(name)](selected)
+                local ep = selected.class:get_exported_vars()[name]
+                local merge_mode = ep.editor_hints.merge_mode
+                if self.node_inspector:is_change_finalized() then
+                    merge_mode = nil
                 end
+                local cmd = model:create_command(("Modify %s"):format(name), merge_mode)
+                cmd:add_do_var(selected, name, v)
+                cmd:add_undo_var(selected, name, old_v)
+                model:commit_command(cmd)
             end
         end
-        self.node_inspector:end_window()
-
-        if not self.node_inspector.open then
-            self.show_inspector = false
-        end
     end
+    self.node_inspector:end_window()
 
-    -- Resource Selector (modal)
+
+end
+
+function Editor:_draw_resource_selector()
     if self.resource_selector:begin_window() then
-
         self.resource_selector:display(self.resource_selector_selection)
         self.resource_selector_selection = self.resource_selector:get_selection()
-
         if self.resource_selector:is_selection_changed() then
             local instance = self.resource_selector_selection[1]()
             self.inspected_resource = instance
@@ -598,6 +589,31 @@ function Editor:draw()
         end                
     end
     self.resource_selector:end_window()
+end
+
+function Editor:draw()
+
+    imgui.ShowDemoWindow() 
+
+    self:_draw_top_bars()
+    self:_draw_scene_nodes()
+    self:_draw_resource_tree_view()
+    self:_draw_node_tree_view()
+    
+    self.resource_inspector:set_open(self.show_inspector)
+    self.node_inspector:set_open(self.show_inspector)
+
+    if self.show_resource_inspector then
+        self:_draw_resource_inspector()
+    else
+        self:_draw_node_inspector()
+    end
+    
+    if not self.node_inspector:get_open() or not self.resource_inspector:get_open() then
+        self.show_inspector = false
+    end
+
+    self:_draw_resource_selector()
 
     console:display(console_output)
 end

@@ -96,23 +96,23 @@ function PhysicsWorld:remove_collidable(collidable)
     end 
 end
 
-
-
 function PhysicsWorld:_step_actor_x(actor, sign)
     local p = actor:get_position()
     local step = vec2(sign, 0)
-    local rmin, rmax = actor:get_bounding_box()
-    
-    local nmin, nmax = rmin + step, rmax + step
+    local rmin, rmax = actor:get_bounding_box() -- old bounding box
+    local nmin, nmax = rmin + step, rmax + step -- new bounding box
     local nearby = self.obstacle_shash:get_nearby_in_rect( nmin.x, nmin.y, (nmax - nmin):unpack() ) 
     local nearby_tiles = {}
     
+    -- Include tilemap obstacles in our collision check
+    -- Due to memory optimization with get_obstacles, we need to store 
+    -- the tile obstacles separately to return them to the object pool
     for _, tilemap in ipairs(self.tilemaps) do
         if tilemap:get_collision_enabled() then
             local t = tilemap:get_obstacles_in_rect(
                 tilemap:transform_to_map(nmin),
                 tilemap:transform_to_map(nmax),
-                true
+                true -- don't auto return to pool
             )
             
             for _,o in ipairs(t) do
@@ -127,16 +127,44 @@ function PhysicsWorld:_step_actor_x(actor, sign)
     for _, obstacle in ipairs(nearby) do
         local omin, omax = obstacle:get_bounding_box()
         
+        -- Can't possibly be intersecting
         if not intersect.aabb_aabb(nmin, nmax, omin, omax) then
             goto CONTINUE
         end
         
+        -- if no heightmap, treat obstacle as aabb
         local hm = obstacle:get_heightmap()
         if #hm == 0 and not intersect.aabb_aabb(rmin, rmax, omin, omax) then
+        
+            if obstacle:has_tag("one_way") then
+                goto CONTINUE
+            end
+        
             obstacle_hit = true
             break
         else
-           
+            
+            -- No collision if actor was previously inside the obstacle
+            if intersect.aabb_aabb(rmin, rmax, omin, omax) then
+                local ox1, ox2 = overlap_interval(rmin.x, rmax.x, omin.x, omax.x)
+                local omax_height = 0
+                for x = ox1, ox2 - 1 do
+                    omax_height = math.max(omax_height, obstacle:get_height(x - omin.x))
+                end
+                
+                if obstacle:get_flip_v() then
+                    local b_edge = omin.y + omax_height
+                    if rmin.y < b_edge then
+                        goto CONTINUE
+                    end
+                else
+                    local t_edge = omax.y - omax_height
+                    if rmax.y > t_edge then
+                        goto CONTINUE
+                    end
+                end
+            end
+        
             local x1, x2 = overlap_interval(nmin.x, nmax.x, omin.x, omax.x)
             
             local max_height = 0
@@ -146,10 +174,28 @@ function PhysicsWorld:_step_actor_x(actor, sign)
                         
             if obstacle:get_flip_v() then                
                 local b_edge = omin.y + max_height
+                
                 if nmin.y < omin.y then
+                    if obstacle:has_tag("one_way") then
+                        goto CONTINUE
+                    end
                     obstacle_hit = true
+                    
                 elseif nmin.y < b_edge then
-                    for i = 1, b_edge - nmin.y do
+                    
+                    local climb_dist = b_edge - nmin.y
+                    
+                    if climb_dist > actor:get_climb_dist() then
+                    
+                        if obstacle:has_tag("one_way") then
+                            goto CONTINUE
+                        else                    
+                            obstacle_hit = true
+                            break
+                        end
+                    end
+                    
+                    for i = 1, climb_dist do
                         if self:_step_actor_y(actor, 1) then
                             obstacle_hit = true
                             actor:translate(vec2(0, -(i - 1)))
@@ -162,8 +208,23 @@ function PhysicsWorld:_step_actor_x(actor, sign)
                 local t_edge = omax.y - max_height
                         
                 if nmax.y > omax.y then
+                    if obstacle:has_tag("one_way") then
+                        goto CONTINUE
+                    end
+                    
                     obstacle_hit = true
                 elseif nmax.y > t_edge then
+                
+                    local climb_dist = nmax.y - t_edge
+                    if climb_dist > actor:get_climb_dist() then
+                        if obstacle:has_tag("one_way") then
+                            goto CONTINUE
+                        else
+                            obstacle_hit = true
+                            break
+                        end
+                    end
+                
                     for i = 1, nmax.y - t_edge do
                         if self:_step_actor_y(actor, -1) then
                             obstacle_hit = true
@@ -223,11 +284,41 @@ function PhysicsWorld:_step_actor_y(actor, sign)
             goto CONTINUE
         end
         
+        if obstacle:has_tag("one_way") and actor:get_jump_down_one_way() then
+            goto CONTINUE
+        end
+        
         local hm = obstacle:get_heightmap()
         if #hm == 0 and not intersect.aabb_aabb(rmin, rmax, omin, omax) then
+        
+            if obstacle:has_tag("one_way") and rmax.y > omin.y then
+                goto CONTINUE
+            end
+        
             obstacle_hit = true
             break
         else
+        
+            if intersect.aabb_aabb(rmin, rmax, omin, omax) then
+                local ox1, ox2 = overlap_interval(rmin.x, rmax.x, omin.x, omax.x)
+                local omax_height = 0
+                for x = ox1, ox2 - 1 do
+                    omax_height = math.max(omax_height, obstacle:get_height(x - omin.x))
+                end
+                
+                if obstacle:get_flip_v() then
+                    local b_edge = omin.y + omax_height
+                    if rmin.y < b_edge then
+                        goto CONTINUE
+                    end
+                else
+                    local t_edge = omax.y - omax_height
+                    if rmax.y > t_edge then
+                        goto CONTINUE
+                    end
+                end
+            end
+        
             local x1, x2 = overlap_interval(nmin.x, nmax.x, omin.x, omax.x)
             local max_height = 0
             for x = x1, x2 - 1 do
@@ -236,12 +327,21 @@ function PhysicsWorld:_step_actor_y(actor, sign)
             
             if obstacle:get_flip_v() then
                 local b_edge = omin.y + max_height
+                
+                if obstacle:has_tag("one_way") and rmin.y < b_edge then
+                    goto CONTINUE
+                end
+                
                 if nmin.y < b_edge then
                     obstacle_hit = true
                     break
                 end
             else
                 local t_edge = omax.y - max_height
+                
+                if obstacle:has_tag("one_way") and rmax.y > t_edge then
+                    goto CONTINUE
+                end
                 
                 if nmax.y > t_edge then
                     obstacle_hit = true

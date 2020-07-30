@@ -28,6 +28,8 @@ Node:export_var("name", "string",
     {filter = function(_, name) return validate_node_name(name) end, 
     merge_mode = "merge_ends"
     })
+    
+Node:export_var("tags", "data")
 
 Node:binser_register()
 
@@ -36,6 +38,7 @@ function Node:initialize()
     
     self.name = self.class.name
     self.editor_hint_is_instance = false
+    self.tags = {foo=true,bar=true}
     
     self.children = {} -- Array of children
 end
@@ -130,6 +133,8 @@ function Node:remove_child(child)
             table.remove(self.children, i)
             
             child:event("unparented")
+            
+            child:_set_tree(nil)
             
             return true
         end
@@ -258,6 +263,18 @@ end
 
 function Node:get_tree()
     return self.tree
+end
+
+function Node:add_tag(tag)
+    self.tags[tag] = true
+end
+
+function Node:has_tag(tag)
+    return self.tags[tag] == true
+end
+
+function Node:remove_tag(tag)
+    self.tags[tag] = nil
 end
 
 function Node:propagate_event_preorder(name, allow_interrupt, ...)

@@ -150,8 +150,6 @@ function TileMap:get_obstacles_in_rect(rectmin, rectmax, dont_auto_push)
     return result
 end
 
-
-
 function TileMap:get_chunk_size()
     return self.tile_size * self.tile_data:get_chunk_length()
 end

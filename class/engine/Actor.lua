@@ -4,11 +4,14 @@ local Collidable = require("class.engine.Collidable")
 local Actor = Collidable:subclass("Actor")
 Actor:export_var("aabb_extents", "vec2", {speed = 0.2, merge_mode = "merge_ends", min = 0, max = math.huge} )
 Actor:export_var("aabb_offset", "vec2", {speed = 0.2, merge_mode = "merge_ends", min = -math.huge, max = math.huge})
+Actor:export_var("cling_dist", "int", {speed = 0.05, merge_mode = "merge_ends", min = 0, max = 16})
+Actor:export_var("climb_dist", "int", {speed = 0.05, merge_mode = "merge_ends", min = 0, max = 16})
 
 Actor:define_get_set("on_ground")
 Actor:define_get_set("on_ceil")
 Actor:define_get_set("on_wall")
 Actor:define_get_set("on_slope")
+Actor:define_get_set("jump_down_one_way")
 
 Actor:binser_register()
 
@@ -17,12 +20,15 @@ function Actor:initialize()
     self.aabb_extents = vec2(8, 16)
     self.aabb_offset = vec2(0, 0)
 
+    self.cling_dist = 1
+    self.climb_dist = 1
 
     self.on_ground = false
     self.on_ceil = false
     self.on_wall = false
-
     self.on_ground_prev = false
+    
+    self.jump_down_one_way = false
 
 end
 
@@ -30,15 +36,15 @@ function Actor:move_and_collide(delta, cling_dist)
     local world = self:get_physics_world()
     assert(world, "Actor must be in a tree")
 
-
     self.on_ground_prev = self.on_ground
-
 
     self.on_ground = false
     self.on_ceil = false
     self.on_wall = false
 
     world:move_actor(self, delta, cling_dist)
+    
+    self.jump_down_one_way = false
 
 end
 

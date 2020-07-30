@@ -243,6 +243,12 @@ function love.load(args, unfiltered_args)
     input.add_action("right")
     input.action_add_bind("right", "keyboard", "right")
     
+    input.add_action("up")
+    input.action_add_bind("up", "keyboard", "up")
+    
+    input.add_action("down")
+    input.action_add_bind("down", "keyboard", "down")
+    
     input.add_action("jump")
     input.action_add_bind("jump", "keyboard", "z")
 

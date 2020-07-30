@@ -78,11 +78,15 @@ function Player:physics_update(dt)
         self.movement_sm:event("off_ground")
     end
     
-    
-    
     if self.on_ground then
         self.jump_count = 1
         self.velocity.y = 0
+    end
+    
+    if self.on_ceil then
+        if self.velocity.y < 0 then
+            self.velocity.y = 0
+        end
     end
 
 
@@ -95,19 +99,22 @@ function Player:physics_update(dt)
     
     self.velocity.x = hor * MOVE_SPEED
     
-    if input.action_is_pressed("jump") and self.jump_count > 0 then
-        self.velocity.y = -JUMP_FORCE
-        self.jump_count = self.jump_count - 1
-        self.on_ground = false
-
+    if input.action_is_pressed("jump") then
+        if input.action_is_down("down") then
+            self.jump_down_one_way = true
+        elseif self.jump_count > 0 then
+            self.velocity.y = -JUMP_FORCE
+            self.jump_count = self.jump_count - 1
+            self.on_ground = false
+        end
     end
     
     
     self.velocity.y = self.velocity.y + GRAVITY * dt
     
     local delta = self.velocity * dt
-    delta.x = math.floor(math.abs(delta.x)) * math.sign(delta.x)
-    delta.y = math.floor(math.abs(delta.y)) * math.sign(delta.y)
+    delta.x = math.ceil(math.abs(delta.x)) * math.sign(delta.x)
+    delta.y = math.ceil(math.abs(delta.y)) * math.sign(delta.y)
     
     
     self:move_and_collide(delta, CLING_DIST)

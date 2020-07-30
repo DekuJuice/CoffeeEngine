@@ -451,26 +451,35 @@ function TileMapPlugin:draw_tileset_editor()
             love.graphics.pop()
             imgui.Image(self.tileset_editor_canvas, rw, rh)
         end
+        
         local tile = tileset:get_tile(self.tileset_selected_tile)
         if tile then
             imgui.Text(("Tile: %d"):format(self.tileset_selected_tile))
             if imgui.Checkbox("collision_enabled", tile.collision_enabled) then
                 tile.collision_enabled = not tile.collision_enabled
+                tileset:set_has_unsaved_changes(true)
             end
             if imgui.Checkbox("heightmap_enabled", tile.heightmap_enabled) then
                 tile.heightmap_enabled = not tile.heightmap_enabled
+                tileset:set_has_unsaved_changes(true)
+
             end
             if imgui.CollapsingHeader("heightmap") then
                 for i = 1, tile_size do
                     local changed, new_v = imgui.DragInt(("%d"):format(i), tile.heightmap[i], 0.05, 1, tile_size)
                     tile.heightmap[i] = new_v
+                    if changed then
+                        tileset:set_has_unsaved_changes(true)
+                    end
                 end
             end
             if imgui.CollapsingHeader("tags") then
                 if imgui.Button(IconFont.PLUS) then
+                    tileset:set_has_unsaved_changes(true)
                 end
                 imgui.SameLine()
                 if imgui.Button(IconFont.MINUS) then
+                    tileset:set_has_unsaved_changes(true)
                 end
             end
         end 
