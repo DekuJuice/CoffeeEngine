@@ -95,7 +95,10 @@ function PhysicsWorld:remove_collidable(collidable)
     end 
 end
 
-function PhysicsWorld:_step_actor_x(actor, sign, exclude)
+-- Exclude is so that when the actor is being moved by a moving obstacle,
+-- they won't collide with that particular obstacle
+
+function PhysicsWorld:_step_actor_x(actor, sign, exclude, pushed)
     local p = actor:get_position()
     local step = vec2(sign, 0)
     local rmin, rmax = actor:get_bounding_box() -- old bounding box
@@ -129,7 +132,7 @@ function PhysicsWorld:_step_actor_x(actor, sign, exclude)
         if obstacle == exclude or not intersect.aabb_aabb(nmin, nmax, omin, omax) then
             goto CONTINUE
         end
-        
+                
         -- if no heightmap, treat obstacle as aabb
         local hm = obstacle:get_heightmap()
         if #hm == 0 and not intersect.aabb_aabb(rmin, rmax, omin, omax) then
@@ -137,9 +140,9 @@ function PhysicsWorld:_step_actor_x(actor, sign, exclude)
             if obstacle:has_tag("one_way") then
                 goto CONTINUE
             end
-        
+            
+            
             obstacle_hit = true
-            break
         else
             
             -- No collision if actor was previously inside the obstacle
@@ -189,12 +192,11 @@ function PhysicsWorld:_step_actor_x(actor, sign, exclude)
                             goto CONTINUE
                         else                    
                             obstacle_hit = true
-                            break
                         end
                     end
                     
                     for i = 1, climb_dist do
-                        if self:_step_actor_y(actor, 1) then
+                        if self:_step_actor_y(actor, 1, exclude) then
                             obstacle_hit = true
                             actor:translate(vec2(0, -(i - 1)))
                             break
@@ -219,12 +221,11 @@ function PhysicsWorld:_step_actor_x(actor, sign, exclude)
                             goto CONTINUE
                         else
                             obstacle_hit = true
-                            break
                         end
                     end
                 
                     for i = 1, nmax.y - t_edge do
-                        if self:_step_actor_y(actor, -1) then
+                        if self:_step_actor_y(actor, -1, exclude) then
                             obstacle_hit = true
                             actor:translate(vec2(0, i - 1))
                             break
@@ -233,6 +234,16 @@ function PhysicsWorld:_step_actor_x(actor, sign, exclude)
                 end
             end
         end
+        
+        
+        if obstacle_hit then
+            if pushed and obstacle:has_tag("no_crush") then
+                obstacle_hit = false
+            else
+                break
+            end
+        end
+        
         
         ::CONTINUE::
     end
@@ -248,7 +259,7 @@ function PhysicsWorld:_step_actor_x(actor, sign, exclude)
     return obstacle_hit
 end
 
-function PhysicsWorld:_step_actor_y(actor, sign, exclude)
+function PhysicsWorld:_step_actor_y(actor, sign, exclude, pushed)
     local p = actor:get_position()
     local step = vec2(0, sign)
     local rmin, rmax = actor:get_bounding_box()
@@ -293,7 +304,6 @@ function PhysicsWorld:_step_actor_y(actor, sign, exclude)
             end
         
             obstacle_hit = true
-            break
         else
         
             if intersect.aabb_aabb(rmin, rmax, omin, omax) then
@@ -331,7 +341,6 @@ function PhysicsWorld:_step_actor_y(actor, sign, exclude)
                 
                 if nmin.y < b_edge then
                     obstacle_hit = true
-                    break
                 end
             else
                 local t_edge = omax.y - max_height
@@ -342,10 +351,17 @@ function PhysicsWorld:_step_actor_y(actor, sign, exclude)
                 
                 if nmax.y > t_edge then
                     obstacle_hit = true
-                    break
                 end
             end
             
+        end
+        
+        if obstacle_hit then
+            if pushed and obstacle:has_tag("no_crush") then
+                obstacle_hit = false
+            else
+                break
+            end
         end
         
         ::CONTINUE::
@@ -484,10 +500,16 @@ function PhysicsWorld:_step_obstacle_x(obstacle, sign)
             end
         elseif y2 - y1 > 0 then
             
+            local blocked = false
+            
             if amin.x == rmax.x and ( sign == 1 or actor:get_stick_moving_wall_left() ) then
-                self:_step_actor_x(actor, sign, obstacle)
+                blocked = self:_step_actor_x(actor, sign, obstacle, true)
             elseif amax.x == rmin.x and ( sign == -1 or actor:get_stick_moving_wall_right() ) then
-                self:_step_actor_x(actor, sign, obstacle)
+                blocked = self:_step_actor_x(actor, sign, obstacle, true)
+            end
+            
+            if blocked and not obstacle:has_tag("no_crush") then
+                actor:crushed()
             end
             
         end
@@ -513,12 +535,17 @@ function PhysicsWorld:_step_obstacle_y(obstacle, sign)
         local y1, y2 = overlap_interval(rmin.y, rmax.y, amin.y, amax.y)
         
         if x2 - x1 > 0 then
-        
+            local blocked = false
             if amax.y == rmin.y and (sign == -1 or actor:get_stick_moving_ground() )  then
-                self:_step_actor_y(actor, sign, obstacle)
+                blocked = self:_step_actor_y(actor, sign, obstacle, true)
             elseif amin.y == rmax.y and (sign == 1 or actor:get_stick_moving_ceil() ) then
-                self:_step_actor_y(actor, sign, obstacle)
+                blocked = self:_step_actor_y(actor, sign, obstacle, true)
             end
+            
+            if blocked and not obstacle:has_tag("no_crush") then
+                actor:crushed()
+            end
+            
         elseif y2 - y1 > 0 then
             
             if amin.x == rmax.x and actor:get_stick_moving_wall_left() then

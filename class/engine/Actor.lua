@@ -53,7 +53,6 @@ function Actor:move_and_collide(delta)
     world:move_actor(self, delta)
     
     self.jump_down_one_way = false
-
 end
 
 function Actor:get_bounding_box()
@@ -66,6 +65,12 @@ end
 function Actor:hit_point(point)
     local rmin, rmax = self:get_bounding_box()
     return intersect.point_aabb(point, rmin, rmax)
+end
+
+function Actor:update_physics_position()
+    local world = self:get_physics_world()
+    assert(world, "Actor must be in a tree")
+    world:update_collidable_position(self)
 end
 
 function Actor:hit_rect(rmin, rmax)
@@ -82,5 +87,7 @@ function Actor:draw_collision()
     love.graphics.rectangle("fill", rectmin.x, rectmin.y, dim.x, dim.y)
     love.graphics.pop()
 end
+
+function Actor:crushed() end
 
 return Actor
