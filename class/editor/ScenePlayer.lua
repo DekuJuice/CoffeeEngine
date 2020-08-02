@@ -57,7 +57,6 @@ function ScenePlayer:draw()
         imgui.SetCursorPos(cx + ox, cy + oy)
         imgui.Image(self.player_tree:get_viewport():get_canvas(), iw * sx, ih * sy)
         
-        
         imgui.EndPopup()
     end
 

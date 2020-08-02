@@ -18,6 +18,7 @@ end
 local input = require("input")
 local lily
 
+
 -- These 3 register themselves into the existing corresponding globals
 require("enginelib.strong") -- Extensions to string library
 require("enginelib.tableutil") -- Extensions to table library
@@ -28,6 +29,30 @@ vec2 = require("enginelib.vec2") -- 2d vectors
 bit = require("bit") -- Luajit bitop library
 
 -- MISC SETUP --
+
+-- Override print to store console output
+do
+    local circularbuffer = require("enginelib.circularbuffer")
+
+    _G.CONSOLE_OUTPUT = circularbuffer.new(1000)
+    
+    local old_print = print
+    -- Output is stored in a circular buffer, _G.CONSOLE_BUFFER_TOP indicates the front
+    
+    print = function(...) 
+        old_print(...)
+            
+        local str = table.pack(...)
+        for i = 1, str.n do
+            str[i] = tostring(str[i])
+        end
+            
+        local ostr = table.concat(str, " ")
+        local timestamp = os.clock()
+        _G.CONSOLE_OUTPUT:push({ostr, timestamp})      
+    end
+end
+
 do -- Register custom (non-class) types to binser
    -- Classes have their registration handled by the Object class
     local binser = require("enginelib.binser")
@@ -129,6 +154,7 @@ function love.load(args, unfiltered_args)
         -- Editor must be run in unfused mode as we write files directly into the game directory,
         -- which we cannot do in fused mode
         assert(not love.filesystem.isFused(), "Editor mode can only be used in unfused mode")
+        
     end
 
     love.filesystem.setIdentity("CoffeeEngine")

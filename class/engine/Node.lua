@@ -38,7 +38,7 @@ function Node:initialize()
     
     self.name = self.class.name
     self.editor_hint_is_instance = false
-    self.tags = {foo=true,bar=true}
+    self.tags = {}
     
     self.children = {} -- Array of children
 end

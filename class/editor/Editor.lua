@@ -20,9 +20,6 @@ local Console = require("class.editor.Console")
 local Editor = Node:subclass("Editor")
 Editor.static.dontlist = true
 
-local console_output = {}
-local console = Console()
-
 local MIN_ZOOM = 0.5
 local MAX_ZOOM = 8.0
 local LOG_MIN_ZOOM = math.log(MIN_ZOOM)
@@ -58,7 +55,6 @@ end
 -- traverse the parent classes to find subclasses. This is useful for listing them in
 -- the editor
 do
-
     local function preload_class(dir)
         for _,v in ipairs(love.filesystem.getDirectoryItems(dir)) do
             local path = dir .. "/" .. v
@@ -73,21 +69,6 @@ do
 
     preload_class("class/engine")
     preload_class("class/game")
-
-
--- Also override print so we can display console output ingame
-    local old_print = print
-    print = function(...) 
-        old_print(...)
-
-        local str = table.pack(...)
-        for i = 1, str.n do
-            str[i] = tostring(str[i])
-        end
-
-        table.insert(console_output, table.concat(str, " "))
-    end
-
 end
 
 function Editor:initialize()
@@ -103,6 +84,8 @@ function Editor:initialize()
     self.action_dispatcher = ActionDispatcher()
 
     -- Add other components of the editor
+    self.console = Console()
+    
     self.resource_tree_view = ResourceTreeView()
     self.resource_tree_view:set_window_name("Resources")
     self.resource_tree_view:set_modal(false)    
@@ -615,8 +598,7 @@ function Editor:draw()
 
     self:_draw_resource_selector()
 
-    console:display(console_output)
-
+    self.console:display()
 
     -- undo/redo stack debug
     --[[local scene = self:get_active_scene()
