@@ -117,7 +117,7 @@ function Player:physics_update(dt)
     delta.y = math.ceil(math.abs(delta.y)) * math.sign(delta.y)
     
     
-    self:move_and_collide(delta, CLING_DIST)
+    self:move_and_collide(delta)
     
 end
 

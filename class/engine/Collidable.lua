@@ -1,5 +1,6 @@
 local Node2d = require("class.engine.Node2d")
 local Collidable = Node2d:subclass("Collidable")
+Collidable.static.noinstance = true
 
 Collidable:export_var("collision_layer", "bitmask", {bits = 16})
 Collidable:export_var("collision_mask", "bitmask", {bits = 16})

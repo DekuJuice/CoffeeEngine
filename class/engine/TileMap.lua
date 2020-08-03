@@ -90,7 +90,7 @@ function TileMap:_get_obstacle(x, y)
     local placehold = tile_placehold_pool:pop()
     
     local c = self:get_cell(x, y)
-    if c == 0 then return nil end
+    if c == 0 or not c then return nil end
     
     local flip_h, flip_v
     

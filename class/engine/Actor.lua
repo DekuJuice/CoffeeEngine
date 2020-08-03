@@ -2,6 +2,8 @@ local intersect = require("enginelib.intersect")
 
 local Collidable = require("class.engine.Collidable")
 local Actor = Collidable:subclass("Actor")
+Actor.static.noinstance = true
+
 Actor:export_var("aabb_extents", "vec2", {speed = 0.2, merge_mode = "merge_ends", min = 0, max = math.huge} )
 Actor:export_var("aabb_offset", "vec2", {speed = 0.2, merge_mode = "merge_ends", min = -math.huge, max = math.huge})
 Actor:export_var("cling_dist", "int", {speed = 0.05, merge_mode = "merge_ends", min = 0, max = 16})

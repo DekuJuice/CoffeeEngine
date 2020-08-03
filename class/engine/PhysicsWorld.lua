@@ -192,6 +192,7 @@ function PhysicsWorld:_step_actor_x(actor, sign, exclude, pushed)
                             goto CONTINUE
                         else                    
                             obstacle_hit = true
+                            goto CONTINUE
                         end
                     end
                     
@@ -221,6 +222,7 @@ function PhysicsWorld:_step_actor_x(actor, sign, exclude, pushed)
                             goto CONTINUE
                         else
                             obstacle_hit = true
+                            goto CONTINUE
                         end
                     end
                 
@@ -622,6 +624,20 @@ function PhysicsWorld:debug_draw()
     for collidable in pairs(self.collidables) do
         if collidable.draw_collision then collidable:draw_collision() end
     end
+end
+
+-- Query funcs
+
+function PhysicsWorld:query_point(p)
+
+end
+
+function PhysicsWorld:query_aabb(rmin, rmax)
+
+end
+
+function PhysicsWorld:query_ray(origin, dir)
+
 end
 
 return PhysicsWorld

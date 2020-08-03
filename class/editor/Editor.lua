@@ -456,20 +456,25 @@ function Editor:_draw_node_tree_view()
         
         if self.node_tree_view:is_new_node_selected() then -- Add new node
             local nclass = self.node_tree_view:get_new_node()
-            local sel = model:get_selected_nodes()
-            local path
-            if sel[1] then path = sel[1]:get_absolute_path() end
-            local instance = nclass()
-            local cmd = model:create_command("Add Node")
-            cmd:add_do_func(function()
-                    model:add_node(path, instance)
-                    model:set_selected_nodes({instance})            
-                end)
-            cmd:add_undo_func(function()
-                    model:remove_node(instance)
-                    model:set_selected_nodes(sel)
-                end)
-            model:commit_command(cmd)
+            
+            if not rawget(nclass.static, "noinstance") then
+            
+                local sel = model:get_selected_nodes()
+                local path
+                if sel[1] then path = sel[1]:get_absolute_path() end
+                local instance = nclass()
+                local cmd = model:create_command("Add Node")
+                cmd:add_do_func(function()
+                        model:add_node(path, instance)
+                        model:set_selected_nodes({instance})            
+                    end)
+                cmd:add_undo_func(function()
+                        model:remove_node(instance)
+                        model:set_selected_nodes(sel)
+                    end)
+                model:commit_command(cmd)
+            
+            end
         end
         
         

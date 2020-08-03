@@ -26,7 +26,6 @@ function module.polygon_polygon(p1, p2)
     
     for i = 1, p1c do
         local j = i % p1c + 1
-        
         table.insert(axes, (p1[j] - p1[i]):perpendicular())
     end
     
@@ -62,6 +61,10 @@ function module.polygon_polygon(p1, p2)
     end
     
     return true
+end
+
+function module.point_circle(point, origin, radius)
+    return (point - origin):len2() <= (radius ^ 2)
 end
 
 return module
