@@ -14,10 +14,25 @@ local function get_imgui_dt()
     return FRAME_TIME
 end
 
+local function plot_time_graph(buffer, w, h, max_h)
+    local c = buffer:get_count()
+    if c < 1 then return end
+    
+    local prev = buffer:at(-1)
+    for x = 1, w - 1 do
+        local s = buffer:at(-(math.floor( x / w * c ) + 1))
+        
+        
+        love.graphics.line(x - 1,  h - prev / max_h * h,  x, h - s / max_h * h)
+        prev = s
+
+    end
+end
+
 -- LIBRARIES
 local input = require("input")
+local circularbuffer = require("enginelib.circularbuffer")
 local lily
-
 
 -- These 3 register themselves into the existing corresponding globals
 require("enginelib.strong") -- Extensions to string library
@@ -31,9 +46,8 @@ bit = require("bit") -- Luajit bitop library
 -- MISC SETUP --
 
 -- Override print to store console output
-do
-    local circularbuffer = require("enginelib.circularbuffer")
 
+do
     _G.CONSOLE_OUTPUT = circularbuffer.new(1000)
     
     local old_print = print
@@ -82,6 +96,10 @@ do -- Register custom (non-class) types to binser
 end
 
 -- CALLBACKS --
+
+local update_times = circularbuffer.new(180)
+local draw_times = circularbuffer.new(180)
+
 function love.run()
     love.math.setRandomSeed(os.time())
     love.load(love.arg.parseGameArguments(arg), arg)
@@ -115,7 +133,11 @@ function love.run()
                     love.handlers[name](a,b,c,d,e,f)
                 end
                 
+                local u_time = os.clock()
+                
                 if love.update then love.update(STEP) end
+                update_times:push(os.clock() - u_time)
+                
                 accum = accum - FRAME_TIME
             end
             
@@ -123,7 +145,15 @@ function love.run()
             if love.graphics.isActive() then
                 love.graphics.clear(love.graphics.getBackgroundColor())
                 love.graphics.origin()
-                if love.draw then love.draw() end
+                
+                
+                local d_time = os.clock()
+                
+                if love.draw then love.draw() end                
+                
+                draw_times:push(os.clock() - d_time)
+                
+                
                 love.graphics.present()
             end
         end
@@ -158,7 +188,7 @@ function love.load(args, unfiltered_args)
     end
 
     love.filesystem.setIdentity("CoffeeEngine")
-
+    
     -- TODO: Load window settings from a file
     local window_settings = {}
     window_settings.title = "CoffeeEngine"
@@ -305,6 +335,8 @@ function love.draw()
     end
 
     if _G.DEBUG then
+        local font = love.graphics.getFont()
+    
         local fps = love.timer.getFPS()
         local gstats = love.graphics.getStats()
         local luamem = collectgarbage("count")
@@ -318,12 +350,29 @@ function love.draw()
             ("Lua Memory: %d kb"):format(luamem)
         }
         
-        local x = 10
-        local y = love.graphics.getHeight() - 22
+        local info_str = table.concat(info, "\n")
         
-        for i = 1, #info do
-            love.graphics.print(info[#info - i + 1], x, y - (i - 1) * 15)
-        end
+        local tx = 10
+        local ty = 10
+        local tw = font:getWidth(info_str)
+        local th = #info * font:getHeight() * font:getLineHeight()
+        
+        love.graphics.print(info_str, tx, love.graphics.getHeight() - th - ty)
+        
+        local gw = 200
+        local gh = 90
+        
+        love.graphics.push("all")
+        love.graphics.translate(tx + tw + 10, love.graphics.getHeight() - gh - 10)
+        love.graphics.rectangle("line", 0, 0, gw, gh)
+        love.graphics.setColor(1,0,0)
+        plot_time_graph(update_times, gw, gh, FRAME_TIME)
+        love.graphics.setColor(0,1,0)
+        plot_time_graph(draw_times, gw, gh, FRAME_TIME)
+        love.graphics.pop()
+        
+        
+        
     end
 
     if imgui then

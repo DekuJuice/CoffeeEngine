@@ -31,9 +31,24 @@ function Pool:pop2 ( )
     return table.remove ( self.pool )
 end
 
+if _G.DEBUG then
+function Pool:pop ( )
+    local r = table.remove(self.pool)
+    if not r then
+        r = self.generator()
+        print(("Pool Miss! (%s)"):format(tostring(r)))
+    end
+    
+    return r
+
+end
+
+else
 -- allocate new object if none available, always returns an object
 function Pool:pop ( )
     return table.remove ( self.pool ) or self.generator ( )
+end
+
 end
 
 -- discard used object for later reuse

@@ -33,10 +33,15 @@ function StateMachine:event(name, ...)
     local e = self.events[name]
     for _,fr in ipairs(e[1]) do
         if fr == "*" or self.current == fr then
-            
             self.current = fr
         end
     end
+end
+
+function StateMachine:clone()
+    local clone = StateMachine()
+    clone.events = table.copy(self.events, true)
+    return clone
 end
 
 return StateMachine

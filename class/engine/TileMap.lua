@@ -13,6 +13,7 @@ TilePlaceholder.static.dontlist = true
 TilePlaceholder.static.empty_heightmap = {}
 
 local tile_placehold_pool = pool.new(function() return TilePlaceholder() end)
+tile_placehold_pool:generate(100)
 
 local TileMap = Collidable:subclass("TileMap")
 
@@ -22,10 +23,6 @@ TileMap:export_var("collision_enabled", "bool")
 TileMap:export_var("tile_size", "int", {min = 4, max = 1024, merge_mode = "merge_ends"})
 
 TileMap:binser_register()
-
-TileMap.static.pool_push_obstacle = function(class, ob)
-    tile_placehold_pool:push(ob)
-end
 
 function TileMap:initialize()
     Collidable.initialize(self)
@@ -80,18 +77,14 @@ function TileMap:get_cell(x, y)
     return self.tile_data:get_cell(x, y)
 end
 
--- IMPORTANT: For optimization purposes, the results returned by
--- get_obstacle and get_obstacles_in_rect by default are invalidated after
--- any subsequent calls to these methods.
--- If you need to keep references to them, pass dont_auto_push = true
--- Make sure you return the returned results with pool_push_obstacle once you're done
+-- IMPORTANT: For optimization purposes, the obstacles returned by these methods
+-- are pooled. Don't forget to return them with pool_push_obstacle when you're done
+-- with them (although they don't strictly need to be, it just wastes memory and gc time if they aren't)
 
-function TileMap:_get_obstacle(x, y)
-    local placehold = tile_placehold_pool:pop()
-    
+function TileMap:get_obstacle(x, y)
     local c = self:get_cell(x, y)
     if c == 0 or not c then return nil end
-    
+        
     local flip_h, flip_v
     
     c, flip_h, flip_v = self:unbitmask_tile(c)
@@ -100,6 +93,7 @@ function TileMap:_get_obstacle(x, y)
     if not tile.collision_enabled then return nil end
 
     local hdim = vec2(self.tile_size / 2, self.tile_size / 2)
+    local placehold = tile_placehold_pool:pop()
 
     placehold:set_aabb_extents(hdim)   
     placehold:set_position(self:transform_to_world(vec2(x, y)) + hdim) 
@@ -113,41 +107,24 @@ function TileMap:_get_obstacle(x, y)
     return placehold
 end
 
-function TileMap:get_obstacle(x, y, dont_auto_push )
-    if not self.tileset then return nil end
-    dont_auto_push = dont_auto_push or false
-
-
-    local placehold = self:_get_obstacle(x, y)
-    if placehold and not dont_auto_push then
-        tile_placehold_pool:push(placehold)
-    end
-    
-    return placehold
-end
-
-function TileMap:get_obstacles_in_rect(rectmin, rectmax, dont_auto_push)
+function TileMap:get_obstacles_in_rect(rectmin, rectmax)
     local result = {}
     if not self.tileset then return result end
 
-    dont_auto_push = dont_auto_push or false
-
     for x = rectmin.x, rectmax.x do
         for y = rectmin.y, rectmax.y do
-            local placehold = self:_get_obstacle(x, y)
+            local placehold = self:get_obstacle(x, y)
             if placehold then
                 table.insert(result, placehold)
             end            
         end
     end
-    
-    if not dont_auto_push then
-        for _,p in ipairs(result) do
-            tile_placehold_pool:push(p)
-        end
-    end
 
     return result
+end
+
+TileMap.static.pool_push_obstacle = function(class, ob)
+    tile_placehold_pool:push(ob)
 end
 
 function TileMap:get_chunk_size()
@@ -321,11 +298,12 @@ function TileMap:draw_collision()
         local tmin = cpos * chunk_length
         local tmax = tmin + vec2(chunk_length - 1, chunk_length - 1)
         
-        
         local obs = self:get_obstacles_in_rect(tmin, tmax)
         for _,o in ipairs(obs) do
            o:draw_collision() 
-        end        
+           TileMap:pool_push_obstacle(o)
+        end
+        
     end
     
     love.graphics.pop()

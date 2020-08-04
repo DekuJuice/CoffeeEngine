@@ -33,6 +33,8 @@ function module:push(v)
     end
 end
 
+-- negative indices are oldest items
+-- positive indices are newest items
 function module:at(i)
     local n = #self.items
     if i == 0 or math.abs(i) > n then

@@ -113,8 +113,7 @@ function PhysicsWorld:_step_actor_x(actor, sign, exclude, pushed)
         if tilemap:get_collision_enabled() then
             local t = tilemap:get_obstacles_in_rect(
                 tilemap:transform_to_map(nmin),
-                tilemap:transform_to_map(nmax),
-                true -- don't auto return to pool
+                tilemap:transform_to_map(nmax)
             )
             
             for _,o in ipairs(t) do
@@ -127,6 +126,10 @@ function PhysicsWorld:_step_actor_x(actor, sign, exclude, pushed)
     local obstacle_hit = false
     
     for _, obstacle in ipairs(nearby) do
+        if bit.band( obstacle:get_collision_layer() and actor:get_collision_mask() ) == 0 then
+            goto CONTINUE
+        end
+    
         local omin, omax = obstacle:get_bounding_box()
         
         if obstacle == exclude or not intersect.aabb_aabb(nmin, nmax, omin, omax) then
@@ -274,8 +277,7 @@ function PhysicsWorld:_step_actor_y(actor, sign, exclude, pushed)
         if tilemap:get_collision_enabled() then
             local t = tilemap:get_obstacles_in_rect(
                 tilemap:transform_to_map(nmin),
-                tilemap:transform_to_map(nmax),
-                true
+                tilemap:transform_to_map(nmax)
             )
             
             for _,o in ipairs(t) do
@@ -288,6 +290,10 @@ function PhysicsWorld:_step_actor_y(actor, sign, exclude, pushed)
     local obstacle_hit = false
     
     for _, obstacle in ipairs(nearby) do
+        if bit.band( obstacle:get_collision_layer() and actor:get_collision_mask() ) == 0 then
+            goto CONTINUE
+        end
+    
         local omin, omax = obstacle:get_bounding_box()
         
         if obstacle == exclude or not intersect.aabb_aabb(nmin, nmax, omin, omax) then
@@ -421,6 +427,13 @@ function PhysicsWorld:move_actor(actor, delta)
                 if self:_step_actor_x(actor, xsign) then
                     hit = true
                     actor.on_wall = true
+                    
+                    if xsign == 1 then
+                        actor.on_wall_right = true
+                    elseif xsign == -1 then
+                        actor.on_wall_left = true
+                    end
+                    
                     break
                 end
                 
@@ -488,6 +501,10 @@ function PhysicsWorld:_step_obstacle_x(obstacle, sign)
     local nearby = self.actor_shash:get_nearby_in_rect(rmin.x, rmin.y, dim:unpack())
     
     for _, actor in ipairs(nearby) do
+        if bit.band( obstacle:get_collision_mask(), actor:get_collision_layer() ) == 0 then
+            goto CONTINUE
+        end
+    
         local amin, amax = actor:get_bounding_box()
 
         local x1, x2 = overlap_interval(rmin.x, rmax.x, amin.x, amax.x)
@@ -515,6 +532,8 @@ function PhysicsWorld:_step_obstacle_x(obstacle, sign)
             end
             
         end
+        
+        ::CONTINUE::
     end
     
     
@@ -531,6 +550,11 @@ function PhysicsWorld:_step_obstacle_y(obstacle, sign)
     local nearby = self.actor_shash:get_nearby_in_rect(rmin.x, rmin.y, dim:unpack())
 
     for _, actor in ipairs(nearby) do
+        
+        if bit.band( obstacle:get_collision_mask(),  actor:get_collision_layer() ) == 0 then
+            goto CONTINUE
+        end
+    
         local amin, amax = actor:get_bounding_box()
 
         local x1, x2 = overlap_interval(rmin.x, rmax.x, amin.x, amax.x)
@@ -557,6 +581,8 @@ function PhysicsWorld:_step_obstacle_y(obstacle, sign)
             end
             
         end
+        
+        ::CONTINUE::
         
     end
     
@@ -628,16 +654,85 @@ end
 
 -- Query funcs
 
-function PhysicsWorld:query_point(p)
+local function intersect_point_obstacle(p, ob)
+    local rmin, rmax = ob:get_bounding_box()
+    if not intersect.point_aabb(p, rmin, rmax) then
+        return false
+    end
+    
+    local hm = ob:get_heightmap()
+    if #hm ~= 0 then
+        local h = ob:get_height(p.x - rmin.x)
+        
+        if ob:get_flip_v() then
+            return p.y < (rmin.y + h)
+        else
+            return p.y > (rmax.y - h)
+        end
+    
+    end
+    
+    return true
+end
+
+function PhysicsWorld:query_point(p, mask, exclude)
+
+    local result = {}
+    result._tiles = {}
+    
+    assert(mask ~= nil, "A mask must be provided")
+    
+    for _,actor in ipairs(self.actor_shash:get_nearby_in_rect(p.x, p.y, 0, 0)) do
+        if bit.band(actor:get_collision_layer(), mask) 
+        and (not exclude or not table.find(exclude, actor) )  then            
+            if intersect.point_aabb(p, actor:get_bounding_box()) then
+                table.insert(result, actor)
+            end            
+        end
+    end
+
+    for _,obstacle in ipairs(self.obstacle_shash:get_nearby_in_rect(p.x, p.y, 0, 0)) do
+        if bit.band(obstacle:get_collision_layer(), mask) 
+        and (not exclude or not table.find(exclude, obstacle))
+        and intersect_point_obstacle(p, obstacle) then
+            table.insert(result, obstacle)
+        end
+    end
+    
+    for _, tilemap in ipairs(self.tilemaps) do
+        if (not exclude or not table.find(exclude, tilemap)) then
+        
+            local o = tilemap:get_obstacle(tilemap:transform_to_map(p):unpack())
+            
+            if o then
+                if bit.band(o:get_collision_layer(), mask)
+                and intersect_point_obstacle(p, o) then
+                    table.insert(result, o)
+                    table.insert(result._tiles, o)
+                else
+                    TileMap.pool_push_obstacle(o)
+                end        
+            end
+            
+        end
+    end
+
+    return result
+end
+
+function PhysicsWorld:query_aabb(rmin, rmax, mask)
 
 end
 
-function PhysicsWorld:query_aabb(rmin, rmax)
+function PhysicsWorld:query_ray(origin, dir, mask)
 
 end
 
-function PhysicsWorld:query_ray(origin, dir)
-
+-- Obstacles from tilemaps are pooled, use this method to return them
+function PhysicsWorld:pool_push_query(result)
+    for _,v in ipairs(result._tiles) do
+        TileMap.pool_push_obstacle(v)
+    end
 end
 
 return PhysicsWorld

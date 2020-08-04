@@ -32,6 +32,9 @@ function Actor:initialize()
     self.on_ground = false
     self.on_ceil = false
     self.on_wall = false
+    self.on_wall_left = false
+    self.on_wall_right = false
+    
     self.on_ground_prev = false
     
     self.jump_down_one_way = false
@@ -51,6 +54,8 @@ function Actor:move_and_collide(delta)
     self.on_ground = false
     self.on_ceil = false
     self.on_wall = false
+    self.on_wall_left = false
+    self.on_wall_right = false
 
     world:move_actor(self, delta)
     
@@ -90,6 +95,8 @@ function Actor:draw_collision()
     love.graphics.pop()
 end
 
-function Actor:crushed() end
+function Actor:crushed() 
+    print(tostring(self) .. " was crushed")
+end
 
 return Actor
