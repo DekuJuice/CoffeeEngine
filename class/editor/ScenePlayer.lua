@@ -20,7 +20,12 @@ function ScenePlayer:play(packed_scene)
     
     self.player_tree:get_viewport():set_resolution(416, 240)
     self.player_tree:set_root(root)
-    self.player_tree:set_debug_draw_physics(true)
+    
+    
+    
+    self.player_tree:set_debug_draw_physics( 
+        self:get_parent():get_active_scene():get_tree():get_debug_draw_physics() --lol
+    )
 end
 
 function ScenePlayer:update(dt)

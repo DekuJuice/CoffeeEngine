@@ -18,6 +18,7 @@ local CLING_DIST = 2
 
 -- Player Extents
 local AABB_EXTENTS = vec2(7, 16) -- 14x32 pixels, or 0.875 x 2 tiles
+local AABB_OFFSET = vec2(0, 0)
 
 local MOVE_SPEED = 120 -- 7.5 tiles / second
 local GRAVITY = 900 -- 0.9375 tiles / second^2
@@ -27,20 +28,20 @@ local DASH_SPEED = 210 --13.125 tiles / second
 local DASH_FRAMES = 28 / 60
 --Dimensions during dash
 local DASH_AABB_EXTENTS = vec2(7, 10)
+local DASH_AABB_OFFSETS = vec2(0, 0)
 
 --Initial velocity when wall slide begins
 local WALL_SLIDE_START_SPEED = 30 -- 0.03125 tiles / second
 local WALL_SLIDE_ACCEL = GRAVITY * 2 -- 1.875 tiles / second^2
 local WALL_SLIDE_FALL_MAX = 90 -- 0.09375 tiles / second
-local WALL_SLIDE_SENSOR_LEFT = vec2( -AABB_EXTENTS.x, 0)
-local WALL_SLIDE_SENSOR_RIGHT = vec2( AABB_EXTENTS.x, 0)
-
+local WALL_SLIDE_SENSOR_LEFT = vec2( -AABB_EXTENTS.x - 1, 0)
+local WALL_SLIDE_SENSOR_RIGHT = vec2( AABB_EXTENTS.x + 1, 0)
 
 --Duration that the player can't move during walljump
 local WALL_JUMP_FRAMES = 8 / 60
 local JUMP_FORCE = 300 -- 0.3125 tiles / second
-local WALL_JUMP_SENSOR_LEFT = vec2(-AABB_EXTENTS.x - 3, 0)
-local WALL_JUMP_SENSOR_RIGHT = vec2(AABB_EXTENTS.x + 3, 0)
+local WALL_JUMP_SENSOR_LEFT = vec2(-AABB_EXTENTS.x - 4, 0)
+local WALL_JUMP_SENSOR_RIGHT = vec2(AABB_EXTENTS.x + 4, 0)
 
 local input = require("input")
 local class = require("enginelib.middleclass")
@@ -50,7 +51,7 @@ local Actor = require("class.engine.Actor")
 local Player = Actor:subclass("Player")
 Player:binser_register()
 
--- Player states:
+-- Player movement states:
 -- standing
 -- air
 -- wallslide
@@ -117,27 +118,35 @@ function StandingState:update(player, dt)
     player:move_and_collide(get_delta(player, dt))
     
     if not player.on_ground then
-        return AirState(player)
+        return AirState(player, COYOTE_TIME)
     end
 end
 
-function AirState:initialize(player, walljump_lock)
+function AirState:initialize(player, coyote_time, walljump_lock)
     walljump_lock = walljump_lock or 0
     self.walljump_lock_timer = walljump_lock
     self.has_move_lock = walljump_lock > 0
+    self.coyote_time = coyote_time or 0
 end
 
-function AirState:update(player, dt)
+function AirState:update(player, dt)   
+    local world = player:get_physics_world()
+    local gp = player:get_global_position()
 
-    move_behaviour(self, player)
-    
     -- Allow early jump ends
     if player.velocity.y < -30 
     and player.is_jumping 
     and not input.action_is_down("jump") then
         player.velocity.y = -30
         player.is_jumping = false
+        if self.has_move_lock then
+            self.walljump_lock_timer = 0
+            self.has_move_lock = false
+            player:release_control("move")
+        end
     end
+
+    move_behaviour(self, player)
     
     -- Wall jumps
     if self.has_move_lock then
@@ -152,9 +161,6 @@ function AirState:update(player, dt)
     if input.action_is_pressed("jump") then
     
         local wall_jump = 0
-        
-        local world = player:get_physics_world()
-        local gp = player:get_global_position()
         local left_p = world:query_point(gp + WALL_JUMP_SENSOR_LEFT, player.collision_mask, player)
         
         for _,o in ipairs(left_p) do
@@ -183,14 +189,28 @@ function AirState:update(player, dt)
             player:lock_control("move")
             self.walljump_lock_timer = WALL_JUMP_FRAMES
             self.has_move_lock = true
+            player.is_jumping = true
+        else -- can't walljump, check for coyote time and allow normal jump
+            if self.coyote_time > 0 then
+                player.is_jumping = true     
+                player.velocity.y = -JUMP_FORCE
+                self.coyote_time = 0
+            end
         end
     end
+    
+    self.coyote_time = self.coyote_time - dt
     
     player.velocity.y = player.velocity.y + GRAVITY * dt
     player:move_and_collide(get_delta(player, dt))
     
     if player.on_ceil then
         player.velocity.y = 0
+        if self.has_move_lock then
+            self.walljump_lock_timer = 0
+            self.has_move_lock = false
+            player:release_control("move")
+        end
     end
     
     if player.on_ground then
@@ -199,12 +219,33 @@ function AirState:update(player, dt)
     
     -- TODO: Point query before entering wallslide state
     if player.on_wall and player.velocity.y >= 0 then
-        local dir = 1
+
+        local can_wallslide = false
+        local dir
+        local query
+        
         if player.on_wall_left then
             dir = -1
+            query = world:query_point(gp + WALL_SLIDE_SENSOR_LEFT, player.collision_mask, player)
+            
+            
+        elseif player.on_wall_right then
+            dir = 1
+            query = world:query_point(gp + WALL_SLIDE_SENSOR_RIGHT, player.collision_mask, player)
         end
-    
-        return WallSlideState(player, dir)
+        
+        for _, o in ipairs(query) do
+            if not o:has_tag("no_wall_slide") then
+                can_wallslide = true
+                break
+            end
+        end
+        
+        world:pool_push_query(query)
+        
+        if can_wallslide then
+            return WallSlideState(player, dir)
+        end
     end
 end
 
@@ -227,12 +268,15 @@ function WallSlideState:update(player, dt)
         player.stick_moving_wall_left = true
     end
     
+    player.is_jumping = false
+    
     local wall_jumped = false
     if input.action_is_pressed("jump") then
         player.velocity.y = -JUMP_FORCE
         player.velocity.x = -self.dir * MOVE_SPEED
         player:lock_control("move")
         wall_jumped = true
+        player.is_jumping = true
     end
     
     move_behaviour(self, player)
@@ -252,7 +296,7 @@ function WallSlideState:update(player, dt)
     or (self.dir == 1 and not player.on_wall_right)
     or (self.dir == -1 and not player.on_wall_left) then
         
-        return AirState(player, wall_jumped and WALL_JUMP_FRAMES or 0)
+        return AirState(player, 0, wall_jumped and WALL_JUMP_FRAMES or 0)
     end
 end
 
@@ -265,6 +309,7 @@ function Player:initialize()
     Actor.initialize(self)
     
     self:set_aabb_extents(AABB_EXTENTS:clone())
+    self:set_aabb_offset(AABB_OFFSET:clone())
     
     self.jump_count = 1
     self.is_jumping = false
@@ -299,7 +344,6 @@ function Player:release_control(which)
 end
 
 function Player:physics_update(dt)
-
     if self.movement_state.update then
         local new = self.movement_state:update(self, dt)
         if new then
@@ -309,30 +353,11 @@ function Player:physics_update(dt)
             self.movement_state = new
         end
     end
+end
 
-
-    --[[local rmin, rmax = self:get_bounding_box()
+function Player:draw()
     local gp = self:get_global_position()
-    local rc = self:get_physics_world():query_point(gp + vec2(self.aabb_extents.x, 0), self.collision_mask, {self})
-
-    if self.on_ground then
-        self.jump_count = 1
-        self.velocity.y = 0
-    end
-    
-    if self.on_ceil then
-        if self.velocity.y < 0 then
-            self.velocity.y = 0
-        end
-    end    ]]--
-    
-    
+    love.graphics.print(self.movement_state.class.name, gp:unpack())
 end
-
-function Player:standing(dt)
-    
-end
-
-
 
 return Player

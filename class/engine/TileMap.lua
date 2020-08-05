@@ -50,11 +50,11 @@ end
 function TileMap:bitmask_tile(t, flip_h, flip_v)
     if t ~= 0 then
         if flip_h then
-            t = bit.bor(t, FLIP_H_BIT)
+            t = bit.bxor(t, FLIP_H_BIT)
         end
         
         if flip_v then
-            t = bit.bor(t, FLIP_V_BIT)
+            t = bit.bxor(t, FLIP_V_BIT)
         end
     end
     return t

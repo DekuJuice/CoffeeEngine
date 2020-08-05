@@ -307,6 +307,11 @@ function love.load(args, unfiltered_args)
     
     input.add_action("jump")
     input.action_add_bind("jump", "keyboard", "z")
+    
+    input.add_action("dash")
+    input.action_add_bind("dash", "keyboard", "lshift")
+    
+    
 
 
     -- Catch stray globals
