@@ -31,7 +31,7 @@ function Pool:pop2 ( )
     return table.remove ( self.pool )
 end
 
-if _G.DEBUG then
+if settings.get_setting("debug") then
 function Pool:pop ( )
     local r = table.remove(self.pool)
     if not r then

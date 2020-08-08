@@ -141,10 +141,11 @@ function SceneModel:initialize(loadpath)
     self.grid_major = vec2(416, 240)
     
     self.tree = SceneTree()
+    self.tree:set_is_editor(true)
     
     if loadpath then
         self.modified = false
-        self.packed_scene = get_resource(loadpath)
+        self.packed_scene = resource.get_resource(loadpath)
         self.tree:set_root(self.packed_scene:instance())
     else
         self.modified = true

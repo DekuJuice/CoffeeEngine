@@ -1,3 +1,138 @@
+local SAMPLES_TO_GENERATE = 600
+
+local easing = require("enginelib.easing")
+
+local Node2d = require("class.engine.Node2d")
+local Camera = Node2d:subclass("Camera")
+
+Camera:binser_register()
+
+local function generate_samples(shake, n)
+    local count = math.min(n, shake.sample_max - #shake.sample_cur)
+
+    for i = 1, count do
+        table.insert(shake.samples, love.math.random() * 2 - 1)
+    end
+end
+
+local function get_shake_displace(shake)
+    local amp = shake.amp
+    
+    if shake.t < shake.attack then
+        amp = amp * (shake.t / shake.attack)
+    elseif shake.t > shake.attack + shake.sustain then
+        amp = amp * ( math.max(0, (shake.t - shake.sustain - shake.attack)) / shake.release)
+    end
+    
+    local i = math.floor(shake.t * shake.freq) + 1
+    local j = i + 1
+    
+    while shake.sample_max > j do
+        generate_samples(shake, SAMPLES_TO_GENERATE)
+    end
+    
+    local s1 = shake.samples[i]
+    local s2 = shake.samples[j]
+    
+    local t1 = i / shake.freq
+    local t2 = j / shake.freq
+    
+    local d = (shake.t - t1) / (t2 - t1) * (s2 - s1) + s1
+    
+    return d
+end
+
+local function new_shake(amp, freq, attack, sustain, release, axis)
+    
+    local shake = {
+        t = 0,
+        samples = {},
+        sample_max = math.floor((attack + sustain + release) * freq),
+        amp = amp, -- How far the shake goes
+        freq = freq, -- How often the shake "shakes"
+        attack = attack, -- How long the shake takes to reach max amp, increasing linearly
+        sustain = sustain, -- How long the shake is sustained at max amp
+        release = release, -- How long the shake takes to stop, fades out linearly
+        axis = axis, -- Axes to shake along
+    }
+    
+    generate_samples(shake, SAMPLES_TO_GENERATE)
+    
+    return shake
+end
+
+function Camera:initialize(w, h)
+    Node2d.initialize(self)
+    self.interp = nil
+    
+    -- Deadzones
+    -- Camera bounds
+    self.bounds = {
+        xmin = -math.huge,
+        xmax = math.huge,
+        ymin = -math.huge,
+        ymax = math.huge
+    }
+    
+    -- Active shakes
+    self.shakes = {}
+end
+
+function Camera:shake(amp, freq, attack, sustain, release, axes)
+    amp = amp or 4
+    freq = freq or 60
+    attack = attack or 0
+    sustain = sustain or 0.5
+    release = release or 0.2
+    axes = (axes or "XY"):upper()
+    
+    if axes:find("X") then table.insert(self.shakes, new_shake(amp, freq, attack, sustain, release, "X") ) end
+    if axes:find("Y") then table.insert(self.shakes, new_shake(amp, freq, attack, sustain, release, "Y") ) end
+end
+
+function Camera:physics_update(dt)
+
+    local view = self:get_tree():get_viewport()
+    local gp = self:get_global_position()
+    
+    view:set_position(gp:clone())
+    
+
+    -- Apply shakes
+    for i = #self.shakes, 1, -1 do
+        local shake = self.shakes[i]
+        shake.t = shake.t + dt
+        
+        local d = get_shake_displace(shake)
+        
+        if shake.axis == "X" then
+            
+        elseif shake.axis == "Y" then
+            
+        end
+        
+        
+        if shake.t > (shake.attack + shake.sustain + shake.release) then
+            table.remove(self.shakes, i)
+        end
+    end
+end
+
+function Camera:draw()
+    local tree = self:get_tree()
+    if tree:get_is_editor() then
+        local view = tree:get_viewport()
+        local gp = self:get_global_position()
+        love.graphics.rectangle("line", gp.x, gp.y, 416, 240)
+        
+    
+    
+    end
+
+end
+
+
+return Camera
 
 
 --[[

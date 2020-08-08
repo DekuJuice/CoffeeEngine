@@ -28,7 +28,7 @@ local DASH_SPEED = 210 --13.125 tiles / second
 local DASH_FRAMES = 28 / 60
 --Dimensions during dash
 local DASH_AABB_EXTENTS = vec2(7, 10)
-local DASH_AABB_OFFSETS = vec2(0, 0)
+local DASH_AABB_OFFSETS = vec2(0, 6)
 
 --Initial velocity when wall slide begins
 local WALL_SLIDE_START_SPEED = 30 -- 0.03125 tiles / second
@@ -55,13 +55,11 @@ Player:binser_register()
 -- standing
 -- air
 -- wallslide
--- dash
 -- death
 
 local StandingState = class("PlayerStandingState")
 local AirState = class("PlayerAirState")
 local WallSlideState = class("PlayerWallSlideState")
-local DashState = class("PlayerDashState")
 local DeathState = class("PlayerDeathState")
 
 local function move_behaviour(state, player)
@@ -76,7 +74,15 @@ local function move_behaviour(state, player)
         or input.action_is_down("left") and -1 
         or input.action_is_down("right") and 1
         
-    player.velocity.x = hor * MOVE_SPEED
+    if state:isInstanceOf(StandingState) and player.is_dashing and hor == 0  then
+        player.velocity.x = player.direction * DASH_SPEED
+        return
+    end
+        
+    player.velocity.x = hor * (player.is_dashing and DASH_SPEED or MOVE_SPEED)
+    if hor ~= 0 then
+        player.direction = hor
+    end
 end
 
 local function jump_behaviour(state, player)
@@ -103,13 +109,38 @@ local function get_delta(player, dt)
     return delta
 end
 
-function StandingState:initialize()
+function StandingState:initialize(player)
     self.jump_count = 1
+    self.dash_time = 0
 end
 
 function StandingState:update(player, dt)
+
     player.velocity.y = 0
     player.is_jumping = false
+    
+    if player.is_dashing then
+        if self.dash_time > 0 then
+            self.dash_time = self.dash_time - dt
+        end
+        
+        if not input.action_is_down("dash") or self.dash_time <= 0 then
+            self.dash_time = 0
+            player:set_aabb_extents(AABB_EXTENTS:clone())
+            player:set_aabb_offset(AABB_OFFSET)
+            player.is_dashing = false
+        end   
+        
+    else
+        if input.action_is_pressed("dash") then
+            player.is_dashing = true
+            self.dash_time = DASH_FRAMES
+        
+            player:set_aabb_extents(DASH_AABB_EXTENTS:clone())
+            player:set_aabb_offset(DASH_AABB_OFFSETS:clone())
+        end
+    end
+
     
     move_behaviour(self, player)
     jump_behaviour(self, player)
@@ -118,20 +149,36 @@ function StandingState:update(player, dt)
     player:move_and_collide(get_delta(player, dt))
     
     if not player.on_ground then
-        return AirState(player, COYOTE_TIME)
+        return AirState(player, COYOTE_TIME, 0, player.is_jumping and JUMP_DASH_BUFFER or 0)
     end
 end
 
-function AirState:initialize(player, coyote_time, walljump_lock)
+function StandingState:exit(player)
+    if self.dash_time > 0 then
+        player:set_aabb_extents(AABB_EXTENTS:clone())
+        player:set_aabb_offset(AABB_OFFSET)
+    end
+
+end
+
+function AirState:initialize(player, coyote_time, walljump_lock, dash_buffer)
     walljump_lock = walljump_lock or 0
     self.walljump_lock_timer = walljump_lock
     self.has_move_lock = walljump_lock > 0
     self.coyote_time = coyote_time or 0
+    self.dash_buffer = dash_buffer or 0
 end
 
 function AirState:update(player, dt)   
     local world = player:get_physics_world()
     local gp = player:get_global_position()
+
+    if self.dash_buffer > 0 then
+        self.dash_buffer = self.dash_buffer - dt
+        if input.action_is_pressed("dash") then
+            player.is_dashing = true
+        end
+    end
 
     -- Allow early jump ends
     if player.velocity.y < -30 
@@ -184,12 +231,16 @@ function AirState:update(player, dt)
         world:pool_push_query(right_p)
         
         if wall_jump ~= 0 then
+            player.is_dashing = input.action_is_down("dash")
             player.velocity.y = -JUMP_FORCE
-            player.velocity.x = MOVE_SPEED * wall_jump
+            player.velocity.x = (player.is_dashing and DASH_SPEED or MOVE_SPEED) * wall_jump
+            
             player:lock_control("move")
             self.walljump_lock_timer = WALL_JUMP_FRAMES
             self.has_move_lock = true
             player.is_jumping = true
+            player.direction = wall_jump
+            
         else -- can't walljump, check for coyote time and allow normal jump
             if self.coyote_time > 0 then
                 player.is_jumping = true     
@@ -205,7 +256,7 @@ function AirState:update(player, dt)
     player:move_and_collide(get_delta(player, dt))
     
     if player.on_ceil then
-        player.velocity.y = 0
+        player.velocity.y = 1
         if self.has_move_lock then
             self.walljump_lock_timer = 0
             self.has_move_lock = false
@@ -217,7 +268,6 @@ function AirState:update(player, dt)
         return StandingState(player)
     end
     
-    -- TODO: Point query before entering wallslide state
     if player.on_wall and player.velocity.y >= 0 then
 
         local can_wallslide = false
@@ -268,15 +318,21 @@ function WallSlideState:update(player, dt)
         player.stick_moving_wall_left = true
     end
     
+    player.direction = -self.dir
+    
     player.is_jumping = false
+    player.is_dashing = false
     
     local wall_jumped = false
     if input.action_is_pressed("jump") then
         player.velocity.y = -JUMP_FORCE
-        player.velocity.x = -self.dir * MOVE_SPEED
+        player.is_dashing = input.action_is_down("dash")
+        player.velocity.x = -self.dir * (player.is_dashing and DASH_SPEED or MOVE_SPEED)
         player:lock_control("move")
-        wall_jumped = true
         player.is_jumping = true
+
+        wall_jumped = true
+        
     end
     
     move_behaviour(self, player)
@@ -296,7 +352,7 @@ function WallSlideState:update(player, dt)
     or (self.dir == 1 and not player.on_wall_right)
     or (self.dir == -1 and not player.on_wall_left) then
         
-        return AirState(player, 0, wall_jumped and WALL_JUMP_FRAMES or 0)
+        return AirState(player, 0, wall_jumped and WALL_JUMP_FRAMES or 0, wall_jumped and JUMP_DASH_BUFFER or 0)
     end
 end
 
@@ -313,6 +369,8 @@ function Player:initialize()
     
     self.jump_count = 1
     self.is_jumping = false
+    self.is_dashing = false
+    self.direction = 1
     
     self.control_locks = {
         all = 0,

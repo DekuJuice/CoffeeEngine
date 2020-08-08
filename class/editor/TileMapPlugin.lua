@@ -113,7 +113,7 @@ end
 
 function TileMapPlugin:enter_tree()
     --[[local tmap = TileMap()
-    tmap:set_tileset(get_resource("assets/tilesets/Forest1.tset"))
+    tmap:set_tileset(resource.get_resource("assets/tilesets/Forest1.tset"))
     self:get_parent():get_active_scene():add_node(nil, tmap)]]--
 end
 

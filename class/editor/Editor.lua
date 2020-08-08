@@ -1,4 +1,3 @@
-local log = require("enginelib.log")
 local lily = require("enginelib.lily")
 
 local scaledraw = require("enginelib.scaledraw")
@@ -15,7 +14,9 @@ local ResourceTreeView = require("class.editor.ResourceTreeView")
 local ResourceSelector = require("class.editor.ResourceSelector")
 local NodeTreeView = require("class.editor.NodeTreeView")
 local NodeInspector = require("class.editor.NodeInspector")
+local SceneSelector = require("class.editor.SceneSelector")
 local Console = require("class.editor.Console")
+local SaveAsModal = require("class.editor.SaveAsModal")
 
 local Editor = Node:subclass("Editor")
 Editor.static.dontlist = true
@@ -85,6 +86,10 @@ function Editor:initialize()
 
     -- Add other components of the editor
     self.console = Console()
+
+    self.scene_selector = SceneSelector()
+    self.scene_selector:set_window_name("Open a scene")
+    self.scene_selector_selection = {}
     
     self.resource_tree_view = ResourceTreeView()
     self.resource_tree_view:set_window_name("Resources")
@@ -121,6 +126,9 @@ function Editor:initialize()
                 --self:open_save_as_modal()
                 return 
             end
+            
+            
+            
         end, "ctrl+s")
 
     self.action_dispatcher:add_action("Save As", function()
@@ -132,6 +140,7 @@ function Editor:initialize()
         end, "ctrl+n")
 
     self.action_dispatcher:add_action("Open Scene", function()
+        self.scene_selector:set_open(true)
         end, "ctrl+o")
 
     self.action_dispatcher:add_action("Close Scene", function()
@@ -431,7 +440,7 @@ function Editor:_draw_resource_tree_view()
 
         self.resource_tree_view_selection = self.resource_tree_view:get_selection()
         if self.resource_tree_view:is_selection_changed() then
-            self.inspected_resource = get_resource(self.resource_tree_view_selection[1])
+            self.inspected_resource = resource.get_resource(self.resource_tree_view_selection[1])
         end
         local focus = imgui.IsWindowFocused({"ImGuiFocusedFlags_RootAndChildWindows"})   
         if focus or self.resource_tree_view:is_selection_changed() then
@@ -504,7 +513,7 @@ function Editor:_draw_resource_inspector()
                 self.inspected_resource:set_filepath(new_path)            
             end
             if self.resource_inspector:save_pressed() then
-                save_resource(self.inspected_resource)
+                resource.save_resource(self.inspected_resource)
             end
         end
     end
@@ -605,11 +614,21 @@ function Editor:draw()
 
     self.console:display()
 
+    self:_draw_scene_selector()
+
     -- undo/redo stack debug
-    --[[local scene = self:get_active_scene()
+    local scene = self:get_active_scene()
     for i,v in ipairs(scene.undo_stack) do
         love.graphics.print(v.name, 200, 200 + 15 * i)
-    end]]--
+    end
+end
+
+function Editor:_draw_scene_selector()
+    if self.scene_selector:begin_window() then
+        self.scene_selector:display(self.scene_selector_selection)
+        self.scene_selector_selection = self.scene_selector:get_selection()
+    end
+    self.scene_selector:end_window()
 end
 
 -- Callbacks --

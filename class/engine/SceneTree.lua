@@ -8,6 +8,7 @@ local PhysicsWorld = require("class.engine.PhysicsWorld")
 local SceneTree = Object:subclass("SceneTree")
 SceneTree:define_get_set("scale_mode")
 SceneTree:define_get_set("debug_draw_physics")
+SceneTree:define_get_set("is_editor")
 
 function SceneTree:initialize()
     Object.initialize(self)
@@ -17,6 +18,7 @@ function SceneTree:initialize()
     self.scale_mode = "aspect"
     self.physics_world = PhysicsWorld()
     self.debug_draw_physics = false
+    self.is_editor = false
 end
 
 function SceneTree:get_physics_world()

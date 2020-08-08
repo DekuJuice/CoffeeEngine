@@ -1,7 +1,6 @@
 -- Resource manager module
 local lily = require("enginelib.lily")
 local binser = require("enginelib.binser")
-local log = require("enginelib.log")
 
 local ImportedResource = require("class.engine.resource.ImportedResource")
 
@@ -72,11 +71,15 @@ do
     end
 end
 
+local module = {}
+
 -- Get the specified resource
 -- Loads the resource in the current thread if it is not loaded
-function get_resource(path)
-
-    assert(love.filesystem.getInfo(path, "file"), ("The file %s does not exist"):format(path))
+function module.get_resource(path)
+    if not love.filesystem.getInfo(path, "file") then
+        log.error(("File %s does not exist"):format(path))
+        return
+    end
 
     -- Check if resource is already loaded
     local cached = get_cached_resource(path)
@@ -143,12 +146,12 @@ function get_resource(path)
     return res
 end
 
-function is_resource_loaded(path)
+function module.is_resource_loaded(path)
     return get_cached_resource(path) ~= nil
 end
 
 -- Load one or more resources in the background
-function load_background(paths, on_complete, on_error, on_loaded)
+function module.load_background(paths, on_complete, on_error, on_loaded)
     local ImportedResource = require("class.engine.resource.ImportedResource")
     
     local lily_args = {} -- Args to pass to lily.loadMultiple
@@ -161,7 +164,7 @@ function load_background(paths, on_complete, on_error, on_loaded)
     
     -- Create load infos for resources that aren't already loaded
     for _,p in ipairs(paths) do
-        if not is_resource_loaded(p) then
+        if not module.is_resource_loaded(p) then
             local rclass = get_associated_resource_class(get_extension(p))
             if rclass then
                 local is_imported = rclass:isSubclassOf(ImportedResource)
@@ -274,9 +277,9 @@ function load_background(paths, on_complete, on_error, on_loaded)
     
 end
 
-if _G.EDITOR_MODE then
+if settings.get_setting("is_editor") then
 
-function write_file(path, data, on_complete, on_error)
+function module.write_file(path, data, on_complete, on_error)
     local tname
     local rand = {}
     -- Generate random filename
@@ -310,7 +313,7 @@ function write_file(path, data, on_complete, on_error)
     end)
 end
 
-function save_resource(resource)
+function module.save_resource(resource)
     assert(resource:get_filepath(), "Resource needs a path to be saved")
     
     local filepath = resource:get_filepath()
@@ -326,7 +329,7 @@ function save_resource(resource)
     local data = binser.serialize(resource)
     resource:set_serialize_full(false)
     
-    write_file(target_path, data, function() 
+    resource.write_file(target_path, data, function() 
         log.info(("Saved resource %s"):format(filepath))
         resource:set_has_unsaved_changes(false)
     end)
@@ -335,3 +338,5 @@ function save_resource(resource)
 end
 
 end
+
+return module

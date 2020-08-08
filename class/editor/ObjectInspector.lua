@@ -85,6 +85,16 @@ function ObjectInspector:_draw_property_widget(obj, ep)
         finalized = imgui.IsItemDeactivatedAfterEdit()
         new_val = vec2(nx, ny)            
         changed = c
+    elseif ptype == "color" then
+        local c, r, g, b, a = imgui.ColorEdit4("##ColorEdit4f", val[1], val[2], val[3], val[4], {"ImGuiColorEditFlags_Float"})
+        finalized = imgui.IsItemDeactivatedAfterEdit()
+        val[1] = r
+        val[2] = g
+        val[3] = b
+        val[4] = a
+        
+        changed = c
+        
     elseif ptype == "bool" then
         changed, new_val = imgui.Checkbox("##Checkbox", val)
         finalized = changed
@@ -169,8 +179,8 @@ function ObjectInspector:_draw_property_widget(obj, ep)
             
             if self.resource_selector:is_selection_changed() then
                 local path = self.resource_selector_selection[1]
-                new_val = get_resource(path)
-                finalized = true         
+                new_val = resource.get_resource(path)
+                finalized = true 
                 
                 self.resource_selector:set_ext_filter(nil)
             end

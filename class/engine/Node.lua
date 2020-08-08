@@ -66,7 +66,7 @@ function Node:_validate_child_name(child)
     
     while exists do
             
-        if _G.EDITOR_MODE then
+        if settings.get_setting("is_editor") then
             attempt = ("%s%d"):format(base_name, cur_num)
             cur_num = cur_num + 1
         else

@@ -27,7 +27,7 @@ Resource.static.binser_register = function(class)
     if not class._deserialize then
         class.static._deserialize = function(filepath_or_data)
             if type(filepath_or_data) == "string" then
-                return get_resource(filepath_or_data)        
+                return resource.get_resource(filepath_or_data)        
             else
                 local instance = class()
                 for _,v in ipairs(filepath_or_data) do

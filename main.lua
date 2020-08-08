@@ -1,17 +1,17 @@
 io.stdout:setvbuf("no") -- Buffered output can act oddly on Windows
 
 -- CONSTANTS --
-_G.EDITOR_MODE = false
-_G.DEBUG = false
 
-local FRAME_TIME = 1 / 60
-local STEP = 1 / 60
-local MAX_ACCUM = FRAME_TIME * 5
-local MAX_LOOP = 500
+settings = require("settings")
+log = require("enginelib.log")
+
+local frame_time = settings.get_setting("frame_time")
+local max_accum = settings.get_setting("max_accum") * frame_time
+local max_loop = settings.get_setting("max_loop")
 
 -- LOCAL FUNCTIONS --
 local function get_imgui_dt()
-    return FRAME_TIME
+    return frame_time
 end
 
 local function plot_time_graph(buffer, w, h, max_h)
@@ -89,7 +89,7 @@ do -- Register custom (non-class) types to binser
     function ffi.cdef(...) -- Warn if we define any more ctypes
         local info = debug.getinfo(2, "Sl")
         local lineinfo = info.short_src .. ":" .. info.currentline
-        require("enginelib.log").warn(("C Type defined at %s, please rewrite binser registration"):format(lineinfo))
+        log.warn(("C Type defined at %s, please rewrite binser registration"):format(lineinfo))
         return cdef(...)
     end
 
@@ -114,11 +114,11 @@ function love.run()
         -- Update dt, as we'll be passing it to update
         love.timer.step()
         dt = love.timer.getDelta()
-        accum = math.min(accum + dt, MAX_ACCUM)
+        accum = math.min(accum + dt, max_accum)
         
-        if accum >= FRAME_TIME then
+        if accum >= frame_time then
             -- Run updates until the accumulated time is less than the frame time
-            while accum >= FRAME_TIME do
+            while accum >= frame_time do
             
                 input.reset_state() -- Called before events are processed to reset pressed/released states
                 
@@ -135,10 +135,10 @@ function love.run()
                 
                 local u_time = os.clock()
                 
-                if love.update then love.update(STEP) end
+                if love.update then love.update(frame_time) end
                 update_times:push(os.clock() - u_time)
                 
-                accum = accum - FRAME_TIME
+                accum = accum - frame_time
             end
             
             -- Draw once every update cycle
@@ -153,64 +153,70 @@ function love.run()
                 
                 draw_times:push(os.clock() - d_time)
                 
-                
                 love.graphics.present()
             end
         end
         
-        if love.timer then love.timer.sleep(1 / MAX_LOOP) end
+        if love.timer then love.timer.sleep(1 / max_loop) end
     end
 end
 
 local main
 
---[[  
-    TODO: Engine configuration file, to specify things such as
-    viewport size, default scene, etc
-]]--
-
 function love.load(args, unfiltered_args)
 
     for i, a in ipairs(args) do
         if a == "-editor" then
-            _G.EDITOR_MODE = true
+            settings.set_setting("is_editor", true)
         elseif a == "-debug" then
-            _G.DEBUG = true
+            settings.set_setting("is_debug", true)
 		end
     end
     
-    if _G.EDITOR_MODE then
+    if settings.get_setting("is_editor") then
         print("Starting Editor Mode")
         -- Editor must be run in unfused mode as we write files directly into the game directory,
         -- which we cannot do in fused mode
         assert(not love.filesystem.isFused(), "Editor mode can only be used in unfused mode")
-        
     end
 
     love.filesystem.setIdentity("CoffeeEngine")
     
-    -- TODO: Load window settings from a file
+    -- Load config file
+    local inifile = require("enginelib.inifile")
+    local ok, res = pcall(inifile.parse, settings.get_setting("config_file"))
+
+    if ok then
+        for _, section in pairs(res) do
+            for k,v in pairs(section) do
+                settings.set_setting(k, v)
+            end
+        end
+    else
+        log.info(res)
+    end
+
     local window_settings = {}
-    window_settings.title = "CoffeeEngine"
-    window_settings.icon = nil
-    window_settings.width = 640
-    window_settings.height = 360
-    window_settings.borderless = false
-    window_settings.centered = true
-    window_settings.resizable = true
-    window_settings.minwidth = 640
-    window_settings.minheight = 360
-    window_settings.fullscreen = false
-    window_settings.fullscreentype = "desktop"
-    window_settings.vsync = 0
-    window_settings.msaa = 0
-    window_settings.depth = nil
-    window_settings.stencil = nil
-    window_settings.display = 1
-    window_settings.highdpi = false
-    window_settings.usedpiscale = false
-    window_settings.x = nil
-    window_settings.y = nil
+    window_settings.title = settings.get_setting("title")
+    window_settings.icon = settings.get_setting("icon")
+    window_settings.width = settings.get_setting("window_width")
+    window_settings.height = settings.get_setting("window_height")
+    window_settings.borderless = settings.get_setting("borderless")
+    window_settings.centered = settings.get_setting("centered")
+    window_settings.resizable = settings.get_setting("resizable")
+    window_settings.minwidth = settings.get_setting("game_width")
+    window_settings.minheight = settings.get_setting("game_height")
+    window_settings.fullscreen = settings.get_setting("fullscreen")
+    window_settings.fullscreentype = settings.get_setting("fullscreen_type")
+    window_settings.vsync = settings.get_setting("vsync")
+    window_settings.msaa = settings.get_setting("msaa")
+    window_settings.depth = settings.get_setting("depth")
+    window_settings.stencil = settings.get_setting("stencil")
+    window_settings.display = settings.get_setting("display")
+    window_settings.highdpi = settings.get_setting("highdpi")
+    window_settings.usedpiscale = settings.get_setting("usedpiscale")
+    window_settings.x = settings.get_setting("window_x")
+    window_settings.y = settings.get_setting("window_y")
     
     -- WINDOW CREATED HERE, DO NOT CALL ANY GRAPHICS FUNCTIONS BEFORE THIS POINT --
     -- Create the window manually to avoid ugly resizing from default resolution
@@ -242,7 +248,7 @@ function love.load(args, unfiltered_args)
     end
 
     -- Editor specific stuff
-    if _G.EDITOR_MODE then
+    if settings.get_setting("is_editor") then
         love.window.maximize()
         -- Load IMGUI
         _G.imgui = require("imgui")
@@ -272,23 +278,29 @@ function love.load(args, unfiltered_args)
 
     -- Init resource manager, this registers some global functions for 
     -- managing resources
-    require("res")
+    resource = require("res")
     
     local SceneTree = require("class.engine.SceneTree")
     
     main = SceneTree()
     
     -- If editor mode enabled, root is the editor
-    if _G.EDITOR_MODE then
+    if settings.get_setting("is_editor") then
         main:get_viewport():set_resolution( love.graphics.getDimensions() )
         main:get_viewport():set_background_color({0.2, 0.2, 0.25, 1})
         main:set_scale_mode("free")
         main:set_root( require("class.editor.Editor")())
         
     else -- Otherwise, it's the main game scene
-        main:set_scale_mode("perfect")
-        main:get_viewport():set_resolution(416, 240) 
-        -- main:set_root( load main scene )
+        main:set_scale_mode( settings.get_setting("scale_mode") )
+        main:get_viewport():set_resolution(
+            settings.get_setting("game_width"),
+            settings.get_setting("game_height")
+        )
+        
+        local mscene = resource.get_resource( settings.get_setting("main_scene") )
+        assert(mscene ~= nil, "No main scene!")
+        main:set_root(mscene:instance())
     end
     
     -- Load input bindings
@@ -311,9 +323,6 @@ function love.load(args, unfiltered_args)
     input.add_action("dash")
     input.action_add_bind("dash", "keyboard", "lshift")
     
-    
-
-
     -- Catch stray globals
     setmetatable(_G, {__newindex = function(self,k,v) error(("Stray global declared '%s'"):format(k)) end})
 end
@@ -339,7 +348,7 @@ function love.draw()
         main:draw(0, 0, love.graphics.getDimensions())
     end
 
-    if _G.DEBUG then
+    if settings.get_setting("debug") then
         local font = love.graphics.getFont()
     
         local fps = love.timer.getFPS()
@@ -371,12 +380,10 @@ function love.draw()
         love.graphics.translate(tx + tw + 10, love.graphics.getHeight() - gh - 10)
         love.graphics.rectangle("line", 0, 0, gw, gh)
         love.graphics.setColor(1,0,0)
-        plot_time_graph(update_times, gw, gh, FRAME_TIME)
+        plot_time_graph(update_times, gw, gh, frame_time)
         love.graphics.setColor(0,1,0)
-        plot_time_graph(draw_times, gw, gh, FRAME_TIME)
+        plot_time_graph(draw_times, gw, gh, frame_time)
         love.graphics.pop()
-        
-        
         
     end
 
@@ -384,7 +391,6 @@ function love.draw()
         -- Newest version of imgui seems to have random errors in drawlist,
         -- pcall render so we don't crash
         local ok, err = pcall(imgui.Render)
-        local log = require("enginelib.log")
         if err then log.error(err) end
     end
 end
@@ -500,7 +506,7 @@ function input.actionreleased(name)
 end
 
 function love.resize(w, h)
-    if _G.EDITOR_MODE then
+    if settings.get_setting("is_editor") then
         main:get_viewport():set_resolution(w, h)
     end
 end
