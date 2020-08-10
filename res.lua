@@ -137,13 +137,27 @@ function module.get_resource(path)
             return 
         end        
     end
-
-    cache_resource(path, res)
-    res:set_has_unsaved_changes(false)
     
-    log.info(("Loaded resource %s"):format(path))
-
-    return res
+    local valid = true
+    
+    if res then
+        local ok, result = pcall(res.isInstanceOf, res, rclass)
+        if not ok then
+            valid = false
+            log.error(result)
+        end
+    else
+        valid = false
+    end
+    
+    if valid then                
+        cache_resource(path, res)
+        res:set_has_unsaved_changes(false)
+        log.info(("Loaded resource %s"):format(path))
+        return res
+    else
+        log.error(("Resource %s is corrupted or invalid"):format(path))
+    end
 end
 
 function module.is_resource_loaded(path)
@@ -329,7 +343,7 @@ function module.save_resource(resource)
     local data = binser.serialize(resource)
     resource:set_serialize_full(false)
     
-    resource.write_file(target_path, data, function() 
+    module.write_file(target_path, data, function() 
         log.info(("Saved resource %s"):format(filepath))
         resource:set_has_unsaved_changes(false)
     end)

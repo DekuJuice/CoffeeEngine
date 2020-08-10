@@ -1,6 +1,7 @@
 local scaledraw = require("enginelib.scaledraw")
 
 local Object = require("class.engine.Object")
+local Node = require("class.engine.Node")
 local Node2d = require("class.engine.Node2d")
 local Viewport = require("class.engine.Viewport")
 local PhysicsWorld = require("class.engine.PhysicsWorld")
@@ -19,6 +20,16 @@ function SceneTree:initialize()
     self.physics_world = PhysicsWorld()
     self.debug_draw_physics = false
     self.is_editor = false
+end
+
+function SceneTree:destroy()
+    Object.destroy(self)
+    self.viewport:destroy()
+    self.physics_world:destroy()
+    if self.root then
+        self.root:destroy()
+        self.root = nil
+    end
 end
 
 function SceneTree:get_physics_world()
@@ -43,7 +54,6 @@ end
 
 -- Sets how canvas contents are upscaled to the screen.
 -- Uses the same options as enginelib.scaledraw.
--- This option is ignored in editor mode
 function SceneTree:set_scale_mode(mode)
     self.scale_mode = mode
 end
@@ -120,9 +130,19 @@ function SceneTree:render()
     self.viewport:set()
     self.viewport:clear()
         
-    for _, node in ipairs(self:_traverse()) do
-        node:event("draw")
+    local stack = {self.root}
+    
+    while (#stack > 0) do
+        local top = table.remove(stack)
+        if top:get_visible() and top:get_tree() == self then
+            top:event("draw")
+            local children = top:get_children()
+            for i = #children, 1, -1 do
+                table.insert(stack, children[i])
+            end
+        end
     end
+    
     if self.debug_draw_physics then
         self.physics_world:debug_draw()
     end

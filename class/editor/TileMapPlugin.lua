@@ -13,7 +13,6 @@ TileMapPlugin.static.dontlist = true
 
 local BRUSH_TOOL = 1
 local ERASE_TOOL = 2
-local FILL_TOOL = 3
 
 local ERASE_BRUSH = {
     width = 1,
@@ -149,15 +148,15 @@ function TileMapPlugin:place_tiles()
                 local i = brush.tiles[(bx - 1) + (by - 1) * brush.width + 1]
                 if i ~= -1 then
                     local t = tilemap:bitmask_tile(i, self.flip_brush_h, self.flip_brush_v)
-                
+
                     self.paint_new_cells:set_cell(x, y, t + 1)
-                    
+
                     local co = self.paint_old_cells:get_cell(x, y)
                     if not co or co == 0 then
                         local old = tilemap:get_cell(x, y) or 0
                         self.paint_old_cells:set_cell(x, y, old + 1)
                     end
-                    
+
                     tilemap:set_cell(x, y, t)
                 end
             end
@@ -179,20 +178,16 @@ function TileMapPlugin:draw_toolbar()
     clicked, e = imgui.RadioButton("Erase (E)", e, ERASE_TOOL); imgui.SameLine()
     if clicked then self.tool = e end
 
-    clicked, e = imgui.RadioButton("Bucket (F)", e, FILL_TOOL); imgui.SameLine()
-    if clicked then self.tool = e end
-    self.tool = e
-    
     if imgui.Checkbox("Flip H (H)", self.flip_brush_h) then
         self.flip_brush_h = not self.flip_brush_h
     end
-    
+
     imgui.SameLine()
-    
+
     if imgui.Checkbox("Flip V (V)", self.flip_brush_v) then
         self.flip_brush_v = not self.flip_brush_v
     end
-    
+
 
 end
 
@@ -314,7 +309,7 @@ function TileMapPlugin:draw_tile_selector()
 
             love.graphics.translate(ox, oy)
             love.graphics.scale(sx, sy)
-            
+
             -- Draw collision boxes
             love.graphics.setColor(210/255, 165/255, 242/255, 0.3)
             love.graphics.setLineStyle("rough")
@@ -323,7 +318,7 @@ function TileMapPlugin:draw_tile_selector()
                 local tile = tileset:get_tile(i)
                 if tile.collision_enabled then
                     local tx, ty, tw, th = quad:getViewport()
-                    
+
                     if tile.heightmap_enabled then
                         for j = 1, tile_size do
                             local hs = tile.heightmap[j]
@@ -334,7 +329,7 @@ function TileMapPlugin:draw_tile_selector()
                     end
                 end
             end
-            
+
             love.graphics.setColor(118/255, 207/255, 255/255, 0.18)
             love.graphics.rectangle("fill", 
                 rectmin.x, rectmin.y,
@@ -360,7 +355,7 @@ end
 function TileMapPlugin:draw_tileset_editor()
     local editor = self:get_parent()
     if not editor.show_resource_inspector then return end
-    
+
     local tileset = editor:get_inspected_resource()
     if not tileset or not tileset:isInstanceOf(Tileset) then return end
 
@@ -429,7 +424,7 @@ function TileMapPlugin:draw_tileset_editor()
                 local tile = tileset:get_tile(i)
                 if tile.collision_enabled then
                     local tx, ty, tw, th = quad:getViewport()
-                    
+
                     if tile.heightmap_enabled then
                         for j = 1, tile_size do
                             local hs = tile.heightmap[j]
@@ -451,7 +446,7 @@ function TileMapPlugin:draw_tileset_editor()
             love.graphics.pop()
             imgui.Image(self.tileset_editor_canvas, rw, rh)
         end
-        
+
         local tile = tileset:get_tile(self.tileset_selected_tile)
         if tile then
             imgui.Text(("Tile: %d"):format(self.tileset_selected_tile))
@@ -578,9 +573,6 @@ function TileMapPlugin:keypressed(key, scan, isRepeat)
     elseif key == "b" then
         self.tool = BRUSH_TOOL
         return true
-    elseif key == "f" then
-        self.tool = FILL_TOOL
-        return true
     elseif key == "h" then
         self.flip_brush_h = not self.flip_brush_h
         return true
@@ -614,20 +606,15 @@ function TileMapPlugin:mousepressed(x, y, button)
     if tilemap and tilemap:isInstanceOf(TileMap) then
 
         if button == 1 then
-            if self.tool == FILL_TOOL then
+            self.drawing = true
+            self.draw_pos = vec2(x, y)
+            self.prev_draw_pos = self.draw_pos:clone()
+            self.paint_new_cells = InfiniteGrid()
+            self.paint_new_cells:set_autoremove_chunks(false)
+            self.paint_old_cells = InfiniteGrid()
+            self.paint_old_cells:set_autoremove_chunks(false)
 
-
-            else
-                self.drawing = true
-                self.draw_pos = vec2(x, y)
-                self.prev_draw_pos = self.draw_pos:clone()
-                self.paint_new_cells = InfiniteGrid()
-                self.paint_new_cells:set_autoremove_chunks(false)
-                self.paint_old_cells = InfiniteGrid()
-                self.paint_old_cells:set_autoremove_chunks(false)
-
-                self:place_tiles()
-            end
+            self:place_tiles()
 
             return true
         elseif button == 2 then

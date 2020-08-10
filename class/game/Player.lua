@@ -102,11 +102,74 @@ local function wall_jump_behaviour(state, player)
     
 end
 
-local function get_delta(player, dt)
-    local delta = player.velocity * dt
-    delta.x = math.ceil(math.abs(delta.x)) * math.sign(delta.x)
-    delta.y = math.ceil(math.abs(delta.y)) * math.sign(delta.y)
-    return delta
+function Player:get_velocity_delta(dt)
+    local delta = self.velocity * dt + self.velocity_remainder
+    local rounded = delta:clone()
+    
+    rounded.x = math.floor(math.abs(rounded.x)) * math.sign(rounded.x)
+    rounded.y = math.floor(math.abs(rounded.y)) * math.sign(rounded.y)
+    
+    self.velocity_remainder = delta - rounded
+        
+    return rounded
+end
+
+function Player:initialize()
+    Actor.initialize(self)
+    
+    self:set_aabb_extents(AABB_EXTENTS:clone())
+    self:set_aabb_offset(AABB_OFFSET:clone())
+    
+    self.jump_count = 1
+    self.is_jumping = false
+    self.is_dashing = false
+    self.direction = 1
+    
+    self.control_locks = {
+        all = 0,
+        move = 0,
+        attack = 0
+    }
+    
+    self.movement_state = StandingState(self)
+
+    self.velocity = vec2(0, 0)
+    self.velocity_remainder = vec2(0, 0)
+end
+
+function Player:lock_control(which)
+    assert(self.control_locks[which] ~= nil, ("Invalid control lock %s"):format(tostring(which)))
+    if which ~= "all" then
+        self.control_locks.all = self.control_locks.all + 1
+    end
+    self.control_locks[which] = self.control_locks[which] + 1
+end
+
+function Player:release_control(which)
+    assert(self.control_locks[which] ~= nil, ("Invalid control lock %s"):format(tostring(which)))
+    
+    if which ~= "all" then
+        self.control_locks.all = self.control_locks.all - 1
+    end
+    self.control_locks[which] = self.control_locks[which] - 1
+    
+end
+
+function Player:physics_update(dt)
+    if self.movement_state.update then
+        local new = self.movement_state:update(self, dt)
+        if new then
+            if self.movement_state.exit then
+                self.movement_state:exit(self)
+            end
+            self.movement_state = new
+        end
+    end
+end
+
+function Player:draw()
+    local gp = self:get_global_position()
+    love.graphics.print(self.movement_state.class.name, gp:unpack())
 end
 
 function StandingState:initialize(player)
@@ -144,9 +207,14 @@ function StandingState:update(player, dt)
     
     move_behaviour(self, player)
     jump_behaviour(self, player)
+        
+    -- Always move at least 1 pixel down so that we can check if we're still on the ground
+    local delta = player:get_velocity_delta(dt)
+    if delta.y == 0 then
+        delta.y = 1
+    end
     
-    player.velocity.y = math.min( player.velocity.y + GRAVITY * dt, MAX_FALL)
-    player:move_and_collide(get_delta(player, dt))
+    player:move_and_collide( delta)
     
     if not player.on_ground then
         return AirState(player, COYOTE_TIME, 0, player.is_jumping and JUMP_DASH_BUFFER or 0)
@@ -251,9 +319,9 @@ function AirState:update(player, dt)
     end
     
     self.coyote_time = self.coyote_time - dt
-    
+
     player.velocity.y = player.velocity.y + GRAVITY * dt
-    player:move_and_collide(get_delta(player, dt))
+    player:move_and_collide(player:get_velocity_delta(dt))
     
     if player.on_ceil then
         player.velocity.y = 1
@@ -338,7 +406,7 @@ function WallSlideState:update(player, dt)
     move_behaviour(self, player)
     
     player.velocity.y = math.min(player.velocity.y + WALL_SLIDE_ACCEL * dt, WALL_SLIDE_FALL_MAX)
-    player:move_and_collide(get_delta(player, dt))
+    player:move_and_collide(player:get_velocity_delta(dt))
     
     if player.on_ceil then
         player.velocity.y = 0
@@ -359,63 +427,6 @@ end
 function WallSlideState:exit(player)
     player.stick_moving_wall_left = false
     player.stick_moving_wall_right = false
-end
-
-function Player:initialize()
-    Actor.initialize(self)
-    
-    self:set_aabb_extents(AABB_EXTENTS:clone())
-    self:set_aabb_offset(AABB_OFFSET:clone())
-    
-    self.jump_count = 1
-    self.is_jumping = false
-    self.is_dashing = false
-    self.direction = 1
-    
-    self.control_locks = {
-        all = 0,
-        move = 0,
-        attack = 0
-    }
-    
-    self.movement_state = StandingState(self)
-
-    self.velocity = vec2(0, 0)
-end
-
-function Player:lock_control(which)
-    assert(self.control_locks[which] ~= nil, ("Invalid control lock %s"):format(tostring(which)))
-    if which ~= "all" then
-        self.control_locks.all = self.control_locks.all + 1
-    end
-    self.control_locks[which] = self.control_locks[which] + 1
-end
-
-function Player:release_control(which)
-    assert(self.control_locks[which] ~= nil, ("Invalid control lock %s"):format(tostring(which)))
-    
-    if which ~= "all" then
-        self.control_locks.all = self.control_locks.all - 1
-    end
-    self.control_locks[which] = self.control_locks[which] - 1
-    
-end
-
-function Player:physics_update(dt)
-    if self.movement_state.update then
-        local new = self.movement_state:update(self, dt)
-        if new then
-            if self.movement_state.exit then
-                self.movement_state:exit(self)
-            end
-            self.movement_state = new
-        end
-    end
-end
-
-function Player:draw()
-    local gp = self:get_global_position()
-    love.graphics.print(self.movement_state.class.name, gp:unpack())
 end
 
 return Player

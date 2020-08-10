@@ -1,12 +1,14 @@
+local middleclass = require("enginelib.middleclass")
+
 local PackedScene = require("class.engine.resource.PackedScene")
 local SceneTree = require("class.engine.SceneTree")
+
 local Object = require("class.engine.Object")
 
-local Command = Object:subclass("UndoRedoCommand")
+local Command = middleclass("UndoRedoCommand")
 local _nil_placehold = {}
 
 function Command:initialize(name, merge_mode)
-    Object.initialize(self)
     self.name = name or ""
     self.do_funcs = {}
     self.undo_funcs = {}
@@ -113,7 +115,6 @@ function Command:undo_command()
 end
 
 local SceneModel = Object:subclass("SceneModel")
-SceneModel:define_get_set("modified")
 SceneModel:define_get_set("grid_minor")
 SceneModel:define_get_set("grid_major")
 SceneModel:define_get_set("draw_grid")
@@ -139,17 +140,23 @@ function SceneModel:initialize(loadpath)
     self.draw_grid = true
     self.grid_minor = vec2(16, 16)
     self.grid_major = vec2(416, 240)
+    if loadpath then
+        self.packed_scene = resource.get_resource(loadpath)
+        if not self.packed_scene then
+            self:destroy()
+            error("Failed to load scene")
+        end
+        
+        self.packed_scene:set_has_unsaved_changes(false)
+    else
+        self.packed_scene = PackedScene()
+    end
     
     self.tree = SceneTree()
     self.tree:set_is_editor(true)
     
     if loadpath then
-        self.modified = false
-        self.packed_scene = resource.get_resource(loadpath)
         self.tree:set_root(self.packed_scene:instance())
-    else
-        self.modified = true
-        self.packed_scene = PackedScene()
     end
     
 end
@@ -224,6 +231,14 @@ function SceneModel:remove_node(instance)
 
 end
 
+function SceneModel:set_modified(modified)
+    self.packed_scene:set_has_unsaved_changes()
+end
+
+function SceneModel:get_modified()
+    return self.packed_scene:get_has_unsaved_changes()
+end
+
 function SceneModel:undo()    
     local command = table.remove(self.undo_stack)
     if not command then return end
@@ -265,5 +280,9 @@ function SceneModel:commit_command(cmd)
     table.insert(self.undo_stack, cmd)
 end
 
+function SceneModel:destroy()
+    Object.destroy(self)
+    self.tree:destroy()
+end
 
 return SceneModel

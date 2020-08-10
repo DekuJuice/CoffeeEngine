@@ -4,24 +4,33 @@ local binser = require("enginelib.binser")
 local middleclass = require("enginelib.middleclass")
 local Object = middleclass("Object")
 
--- Create generic getters/setters for the given property
+--- Create generic getters/setters for the given property.
+-- Don't forget to actually initialize these properties when creating the object
+-- @param class
+-- @param name
 Object.static.define_get_set = function(class, name)
     class[("set_%s"):format(name)] = function(self, v) self[name] = v end
     class[("get_%s"):format(name)] = function(self) return self[name] end
 end
 
--- Define a signal for the signal/slot system
+--- Define a signal for the signal/slot system.
+-- If we try to emit or connect to an undefined signal, an error will be thrown.
+-- @param class
+-- @param name The signal name
 Object.static.define_signal = function(class, name)
     class.static.signals = rawget(class.static, "signals") or {} -- Create signals table it does not exist
     table.insert(class.static.signals, name)
 end
 
--- Exports a member of the class, marking it for serialization, and allowing it to be displayed in the editor if desired
+--- Exports a member of the class, marking it for serialization, and allowing it to be displayed in the editor if desired.
 -- Also defines standard getset functions for it
--- filter specifies a filter function on entered data to validate it
--- Editor hints are hints to how the editing widget should be displayed, ie names of fields in vectors, 
--- min/max ranges, etc
--- These vary depending on the datatype, check _draw_property_widget in class/editor/Editor.lua for more details
+-- @param class
+-- @param name The property name
+-- @param datatype Datatypes can be anything, see ObjectInspector to see how different types are handled.
+-- In particular, data indicates a custom editor is needed and the property will not be shown in 
+-- the object inspector
+-- @param editor_hints A table containing various hints to how the editing widget should be displayed.
+-- These vary depending on the datatype, check _draw_property_widget in class/editor/Editor.lua for more details 
 Object.static.export_var = function(class, name, datatype, editor_hints)
     
     assert(name ~= nil, "A name must be given!")
@@ -95,7 +104,29 @@ function Object:_serialize()
     return res
 end
 
+local _destroy_guard_func = function(guard)
+    local mt = getmetatable(guard)
+    local obj = mt._obj
+    if not settings.get_setting("suppress_destroy_guard_nag") 
+    and not obj.suppress_destroy_guard_nag
+    and not obj.destroyed then
+        log.info(
+            ("%s was not properly destroyed before being garbage collected!"):format(tostring(obj))
+        )
+    end
+end
+
 function Object:initialize()
+
+    self.destroyed = false
+    if _VERSION == "Lua 5.1" then
+        -- If possible, use undocumented newproxy() function to make gc nag if 
+        -- we let an Object get garbage collected without first calling destroy on it
+        self.destroy_guard = newproxy(true)
+        local mt = getmetatable(self.destroy_guard)
+        mt.__gc = _destroy_guard_func
+        mt._obj = self
+    end
 
     self.connections = {}
     self.signals = {}
@@ -112,7 +143,7 @@ function Object:initialize()
     end
 end
 
--- Connect a signal to a slot (method)
+--- Connect a signal to a slot (method)
 -- signal (string) is the name of the signal
 -- target (Object) is the object to connect to
 -- method (string) is the name of the method in the target object
@@ -151,6 +182,7 @@ function Object:disconnect_all()
         end
         self.signals[name] = {}
     end
+    
 end
 
 function Object:is_connected(signal, target, method)
@@ -179,6 +211,20 @@ function Object:emit_signal(signal, ...)
             c.target[c.method](c.target, ...)
         end
     end
+end
+
+-- Once you're done with an object, you should destroy it to ensure signals are properly removed
+function Object:destroy()
+    if self.destroyed then return end
+    
+    -- Disconnect all signals
+    self:disconnect_all()
+    
+    self.destroyed = true
+end
+
+function Object:is_destroyed()
+    return self.destroyed
 end
 
 -- Internal helper for disconnecting signals

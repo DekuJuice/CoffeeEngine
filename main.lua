@@ -1,7 +1,7 @@
 io.stdout:setvbuf("no") -- Buffered output can act oddly on Windows
 
 -- CONSTANTS --
-
+require("errorhandler")
 settings = require("settings")
 log = require("enginelib.log")
 
@@ -348,7 +348,14 @@ function love.draw()
         main:draw(0, 0, love.graphics.getDimensions())
     end
 
-    if settings.get_setting("debug") then
+    if imgui then
+        -- Newest version of imgui seems to have random errors in drawlist,
+        -- pcall render so we don't crash
+        local ok, err = pcall(imgui.Render)
+        if err then log.error(err) end
+    end
+
+    if settings.get_setting("is_debug") then
         local font = love.graphics.getFont()
     
         local fps = love.timer.getFPS()
@@ -387,12 +394,6 @@ function love.draw()
         
     end
 
-    if imgui then
-        -- Newest version of imgui seems to have random errors in drawlist,
-        -- pcall render so we don't crash
-        local ok, err = pcall(imgui.Render)
-        if err then log.error(err) end
-    end
 end
 
 function love.mousepressed(x, y, button, is_touch, presses)
@@ -512,6 +513,10 @@ function love.resize(w, h)
 end
 
 function love.quit()
+    -- Doesn't matter if we don't destroy objects properly here as we're quitting the game
+    -- The nagging cause a bit of lag if we don't suppress it
+    settings.set_setting("suppress_destroy_guard_nag", true)
+
     if imgui then
         imgui.ShutDown()
     end

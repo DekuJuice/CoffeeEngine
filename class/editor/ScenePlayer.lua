@@ -9,28 +9,44 @@ function ScenePlayer:initialize()
     Node.initialize(self)
     
     self.open = false
-    self.player_tree = SceneTree()
-    self.player_tree:get_viewport():set_background_color({0,0,0,1})
+
 end
 
-function ScenePlayer:play(packed_scene)
+function ScenePlayer:parented(parent)
+    parent:add_action("Play Scene", function()
+        local scene = parent:get_active_scene()
+        self:play(scene)    
+    end, "f5")
+end
 
-    self.open = true
-    local root = packed_scene:instance()
+function ScenePlayer:play(scene)
+
+    if not scene:get_tree():get_root() then return end
     
-    self.player_tree:get_viewport():set_resolution(416, 240)
+    local packed = scene:pack()
+    local root = packed:instance()
+    
+    self.open = true
+    
+    self.player_tree = SceneTree()
+    self.player_tree:set_scale_mode( settings.get_setting("upscale_mode") )
+    self.player_tree:get_viewport():set_background_color({0,0,0,1})
+    self.player_tree:get_viewport():set_resolution(settings.get_setting("game_width"), settings.get_setting("game_height"))
+    self.player_tree:set_debug_draw_physics( scene:get_tree():get_debug_draw_physics() )
     self.player_tree:set_root(root)
     
-    
-    
-    self.player_tree:set_debug_draw_physics( 
-        self:get_parent():get_active_scene():get_tree():get_debug_draw_physics() --lol
-    )
+    -- TODO: Create autoload nodes
 end
 
 function ScenePlayer:update(dt)
     if self.open then
         self.player_tree:update(dt)
+    end
+end
+
+function ScenePlayer:draw_toolbar()
+    if imgui.Button(("%s Play Scene"):format(IconFont.PLAY) ) then
+        self:get_parent():do_action("Play Scene")
     end
 end
 
@@ -54,10 +70,9 @@ function ScenePlayer:draw()
         local viewport = self.player_tree:get_viewport()
         local iw, ih = viewport:get_resolution()
         
-        
         self.player_tree:render()
         
-        local sx, sy, ox, oy = scaledraw.get_transform("perfect", iw, ih, 0, 0, rw, rh)
+        local sx, sy, ox, oy = scaledraw.get_transform(  self.player_tree:get_scale_mode() , iw, ih, 0, 0, rw, rh)
         
         imgui.SetCursorPos(cx + ox, cy + oy)
         imgui.Image(self.player_tree:get_viewport():get_canvas(), iw * sx, ih * sy)
@@ -67,9 +82,8 @@ function ScenePlayer:draw()
 
     self.open = window_open
     if not self.open then   
-        self.player_tree:set_root(nil)
+        self.player_tree = nil
     end
-
 
 end
 

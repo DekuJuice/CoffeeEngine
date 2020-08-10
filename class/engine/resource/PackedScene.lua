@@ -3,6 +3,7 @@
 local binser = require("enginelib.binser")
 local Resource = require("class.engine.resource.Resource")
 local PackedScene = Resource:subclass("PackedScene")
+PackedScene.static.extensions = {"scene"}
 PackedScene.static.dontlist = true
 PackedScene:export_var("data", "data")
 PackedScene:binser_register()

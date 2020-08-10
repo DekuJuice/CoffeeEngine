@@ -1,7 +1,7 @@
-local Object = require("class.engine.Object")
-
+local Object = require("class.engine.Node")
 local TreeView = Object:subclass("TreeView")
 
+TreeView:define_signal("selection_made")
 TreeView:define_get_set("modal")
 TreeView:define_get_set("window_name")
 TreeView:define_get_set("select_leaf_only")
@@ -17,7 +17,6 @@ function TreeView:initialize()
     self.display_extra_width = 0
     
     self.window_name = "Tree Selector"
-    self.select_leaf_only = true
 end
 
 -- Return root node of the tree, needs to be overridden
@@ -51,34 +50,7 @@ function TreeView:get_node_name(node)
 end
 
 function TreeView:begin_window(flags)
-    local window_flags = {}
-    if flags then
-        for _,f in ipairs(flags) do
-            table.insert(window_flags, v)
-        end
-    end
-    
-    imgui.SetNextWindowSize(400, 400, {"ImGuiCond_FirstUseEver"})
-    
-    local should_draw, window_open
-    if self.modal then
-        if self.open then
-            imgui.OpenPopup(self.window_name)
-        end
-        
-        should_draw, window_open = imgui.BeginPopupModal(self.window_name, self.open, window_flags)
-    else
-        
-        if not self.open then
-            return false
-        end
-        
-        should_draw, window_open = imgui.Begin(self.window_name, self.open, window_flags)
-    end
-    
-    self.open = window_open
-    
-    return should_draw
+
 end
 
 function TreeView:display(old_selection)
@@ -204,25 +176,13 @@ end
 
 function TreeView:end_window()
 
-    self.new_selection = nil
-    self.selection_changed = nil
-    
-    if self.open then
-        if self.modal then
-            imgui.EndPopup()
-        else
-            imgui.End()
-        end
-    end
 end
 
 -- Querying functions, must be called between display() and end_window()
 function TreeView:is_selection_changed()
-    return self.selection_changed
 end
 
 function TreeView:get_selection()
-    return self.new_selection
 end
 
 return TreeView

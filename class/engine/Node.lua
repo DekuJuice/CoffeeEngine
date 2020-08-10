@@ -30,12 +30,14 @@ Node:export_var("name", "string",
     })
     
 Node:export_var("tags", "data")
+Node:export_var("visible", "boolean")
 
 Node:binser_register()
 
 function Node:initialize()
     Object.initialize(self)
     
+    self.visible = true
     self.name = self.class.name
     self.editor_hint_is_instance = false
     self.tags = {}
@@ -122,7 +124,7 @@ function Node:add_child(child)
     self:_validate_child_name(child)
     child:_set_tree(self:get_tree())
         
-    child:event("parented")
+    child:event("parented", self)
 end
 
 function Node:remove_child(child)
@@ -132,7 +134,7 @@ function Node:remove_child(child)
             c.name_num = 1
             table.remove(self.children, i)
             
-            child:event("unparented")
+            child:event("unparented", self)
             
             child:_set_tree(nil)
             
@@ -309,6 +311,15 @@ end
 
 function Node:event(name, ...)
     if self[name] then return self[name](self, ...) end
+end
+
+-- This destroys all child nodes as well. If you want to preserve any, remove them
+-- first before destroying
+function Node:destroy()
+    Object.destroy(self)
+    for _,v in ipairs(self.children) do
+        v:destroy()
+    end
 end
 
 return Node

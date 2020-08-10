@@ -15,8 +15,6 @@ local ResourceSelector = require("class.editor.ResourceSelector")
 local NodeTreeView = require("class.editor.NodeTreeView")
 local NodeInspector = require("class.editor.NodeInspector")
 local SceneSelector = require("class.editor.SceneSelector")
-local Console = require("class.editor.Console")
-local SaveAsModal = require("class.editor.SaveAsModal")
 
 local Editor = Node:subclass("Editor")
 Editor.static.dontlist = true
@@ -84,33 +82,6 @@ function Editor:initialize()
     self.view_pos = vec2()
     self.action_dispatcher = ActionDispatcher()
 
-    -- Add other components of the editor
-    self.console = Console()
-
-    self.scene_selector = SceneSelector()
-    self.scene_selector:set_window_name("Open a scene")
-    self.scene_selector_selection = {}
-    
-    self.resource_tree_view = ResourceTreeView()
-    self.resource_tree_view:set_window_name("Resources")
-    self.resource_tree_view:set_modal(false)    
-    self.resource_tree_view_selection = {}
-
-    self.resource_selector = ResourceSelector()
-    self.resource_selector:set_window_name("Choose a resource type")
-    self.resource_selector_selection = {}
-
-    self.node_tree_view = NodeTreeView()
-    self.node_tree_view:set_window_name("Nodes")
-    self.node_tree_view:set_modal(false)
-
-    self.resource_inspector = ResourceInspector()
-    self.resource_inspector:set_window_name("Inspector")
-    self.inspected_resource = nil
-
-    self.node_inspector = NodeInspector()
-    self.node_inspector:set_window_name("Inspector")
-
     self.show_resource_inspector = true -- whether to show resource inspector or node inspector
     self.show_inspector = true
 
@@ -118,21 +89,23 @@ function Editor:initialize()
     self.action_dispatcher:add_action("Save", function() 
             local model = self:get_active_scene()
             if not model:get_tree():get_root() then
-                --self:open_alert_modal("The scene must have a root node to be saved.")
+                self:get_node("AlertModal"):show("Alert!", "The scene must have a root node to be saved.", {"Ok"})
                 return
             end
             local path = model:get_filepath()
             if not path then
-                --self:open_save_as_modal()
+                self.action_dispatcher:do_action("Save As")
                 return 
             end
             
-            
+            resource.save_resource(model:pack())
             
         end, "ctrl+s")
 
     self.action_dispatcher:add_action("Save As", function()
-            -- Open saveas modal
+            self:get_node("SaveAsModal"):open( 
+                self:get_active_scene():get_filepath()
+            )
         end, "ctrl+shift+s")
 
     self.action_dispatcher:add_action("New Scene", function()
@@ -140,7 +113,7 @@ function Editor:initialize()
         end, "ctrl+n")
 
     self.action_dispatcher:add_action("Open Scene", function()
-        self.scene_selector:set_open(true)
+            self:get_node("OpenSceneModal"):open()
         end, "ctrl+o")
 
     self.action_dispatcher:add_action("Close Scene", function()
@@ -174,31 +147,23 @@ function Editor:initialize()
             self.show_inspector = not self.show_inspector
         end, "ctrl+shift+i")
 
-    self.action_dispatcher:add_action("Show Resource Selector", function()
-            self.resource_tree_view.open = not self.resource_tree_view.open
-        end, "ctrl+shift+r")
+    -- Add other components
+    for _, p in ipairs({
+        "class.editor.Console",
+        "class.editor.Node2dPlugin",
+        "class.editor.CollidablePlugin",
+        "class.editor.TileMapPlugin",
+        "class.editor.SaveAsModal",
+        "class.editor.OpenSceneModal",
+        "class.editor.AlertModal",
+        "class.editor.ScenePlayer"
+    }) do
+        self:add_child(require(p)())
+    end
+    
+    
+    
 
-    self.action_dispatcher:add_action("Show Node Selector", function()
-            self.node_tree_view.open = not self.node_tree_view.open
-        end, "ctrl+shift+n")
-
-    self.action_dispatcher:add_action("Play Scene", function()
-            local scene = self:get_active_scene()
-
-            if not scene:get_tree():get_root() then return end
-
-            local player = self:get_node("ScenePlayer")
-            local packed_scene = scene:pack()
-
-            player:play(packed_scene)        
-        end, "f5")
-
-    -- Add plugins
-
-    self:add_child(require("class.editor.Node2dPlugin")())
-    self:add_child(require("class.editor.TileMapPlugin")())
-    self:add_child(require("class.editor.CollidablePlugin")())
-    self:add_child(require("class.editor.ScenePlayer")())
 end
 
 function Editor:get_active_scene()
@@ -209,7 +174,25 @@ function Editor:get_active_view()
     return self:get_active_scene():get_tree():get_viewport()
 end
 
+function Editor:add_action(name, func, shortcut)
+    self.action_dispatcher:add_action(name, func, shortcut)
+end
+
+function Editor:do_action(name)
+    self.action_dispatcher:do_action(name)
+end
+
 function Editor:add_new_scene(filepath)
+
+    if filepath then
+        for i,scene in ipairs(self.scene_models) do
+            if scene:get_filepath() == filepath then
+                self.active_scene = i
+                return
+            end
+        end
+    end
+
     local model = SceneModel(filepath)
     model:get_tree():set_debug_draw_physics(true)
     table.insert(self.scene_models, model)
@@ -217,16 +200,37 @@ function Editor:add_new_scene(filepath)
     self.active_scene = #self.scene_models
 end
 
-function Editor:close_scene(index)
+function Editor:_close_scene(index)
+
     if self.active_scene > index or self.active_scene == #self.scene_models then
         self.active_scene = self.active_scene - 1
     end
 
-    table.remove(self.scene_models, index)
+    local scene = table.remove(self.scene_models, index)
+    scene:destroy()
 
     if (#self.scene_models == 0) then
         self:add_new_scene()
         self.active_scene = 1
+    end
+end
+
+function Editor:_on_close_modal_button_pressed(index, button)
+    if button == "Confirm" then
+        self:_close_scene(index)
+    end
+    local am = self:get_node("AlertModal")
+    am:disconnect("button_pressed", self, "_on_close_modal_button_pressed")
+end
+
+function Editor:close_scene(index)
+    local scene = self.scene_models[index]
+    if scene:get_modified() then
+        local am = self:get_node("AlertModal")
+        am:show("Alert!", "Scene has unsaved changes. Close anyways?", {"Confirm", "Cancel"})
+        am:connect("button_pressed", self, "_on_close_modal_button_pressed")
+    else
+        self:_close_scene(index)
     end
 end
 
@@ -305,8 +309,6 @@ function Editor:_draw_top_bars()
             self:_menu_item("Toggle Grid", self:get_active_scene():get_draw_grid() )
             imgui.Separator()
             self:_menu_item("Show Inspector", self.show_inspector)
-            self:_menu_item("Show Node Selector", self.node_inspector:get_open())
-            self:_menu_item("Show Resource Selector", self.resource_inspector:get_open())
             imgui.EndMenu()
         end
 
@@ -344,7 +346,7 @@ function Editor:_draw_top_bars()
             local tabname = ("%d. %s"):format(i, model:get_name())        
             local tabflags = {}
 
-            if model.modified then
+            if model:get_modified() then
                 table.insert(tabflags, "ImGuiTabItemFlags_UnsavedDocument")
             end
 
@@ -362,16 +364,12 @@ function Editor:_draw_top_bars()
 
         imgui.EndTabBar()
 
-        -- Toolbar --
-        if imgui.Button( ("%s Play Scene"):format(IconFont.PLAY)) then
-            self.action_dispatcher:do_action("Play Scene")
-        end
 
-
-        imgui.SameLine()
-        for _,c in ipairs(self.children) do
+        for i = #self.children, 1, -1 do
+            local c = self.children[i]
             if c.draw_toolbar then
                 c:draw_toolbar()
+                imgui.SameLine()
             end
         end
 
@@ -594,10 +592,10 @@ function Editor:draw()
 
     self:_draw_top_bars()
     self:_draw_scene_nodes()
-    self:_draw_resource_tree_view()
-    self:_draw_node_tree_view()
+    --self:_draw_resource_tree_view()
+    --self:_draw_node_tree_view()
     
-    self.resource_inspector:set_open(self.show_inspector)
+    --[[self.resource_inspector:set_open(self.show_inspector)
     self.node_inspector:set_open(self.show_inspector)
 
     if self.show_resource_inspector then
@@ -608,27 +606,17 @@ function Editor:draw()
     
     if not self.node_inspector:get_open() or not self.resource_inspector:get_open() then
         self.show_inspector = false
-    end
+    end]]--
 
-    self:_draw_resource_selector()
-
-    self.console:display()
-
-    self:_draw_scene_selector()
+    --self:_draw_resource_selector()
+    --self:_draw_scene_selector()
 
     -- undo/redo stack debug
+    --[[
     local scene = self:get_active_scene()
     for i,v in ipairs(scene.undo_stack) do
         love.graphics.print(v.name, 200, 200 + 15 * i)
-    end
-end
-
-function Editor:_draw_scene_selector()
-    if self.scene_selector:begin_window() then
-        self.scene_selector:display(self.scene_selector_selection)
-        self.scene_selector_selection = self.scene_selector:get_selection()
-    end
-    self.scene_selector:end_window()
+    end]]--
 end
 
 -- Callbacks --

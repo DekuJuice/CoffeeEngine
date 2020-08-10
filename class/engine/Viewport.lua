@@ -9,6 +9,7 @@ Viewport:define_get_set("position")
 Viewport:define_get_set("background_color")
 
 function Viewport:initialize(w, h)
+    Object.initialize(self)
     self.canvas = love.graphics.newCanvas(w, h)
     self.position = vec2(0, 0)
     self.scale = 1

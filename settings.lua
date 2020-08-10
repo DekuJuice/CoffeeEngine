@@ -81,11 +81,15 @@ end
 
 -- Project settings
 define_setting("config_file", "config.txt", {read_only})
+define_setting("asset_dir", "assets", {read_only})
+define_setting("scene_dir", "scene", {read_only})
+
 define_setting("title", "CoffeeEngine", {read_only})
 define_setting("icon", nil, {read_only})
 
 define_setting("is_debug", false, {is_boolean})
 define_setting("is_editor", false, {is_boolean})
+define_setting("suppress_destroy_guard_nag", false, {is_boolean})
 
 define_setting("game_width", 416, {is_int, is_real, curry(is_greater, 0)})
 define_setting("game_height", 240, {is_int, is_real, curry(is_greater, 0)})
@@ -121,7 +125,7 @@ define_setting("window_x", nil, {is_int, is_real})
 define_setting("window_y", nil, {is_int, is_real})
 define_setting("centered", true, {is_boolean})
 
-define_setting("upscale_mode", "perfect", {curry(is_member, {"perfect", "free", "aspect"})})
+define_setting("upscale_mode", "aspect", {curry(is_member, {"perfect", "free", "aspect"})})
 define_setting("fullscreen", false, {is_boolean})
 define_setting("fullscreen_type", "desktop", {curry(is_member, {"desktop", "exclusive"})})
 define_setting("borderless", false, {is_boolean})
