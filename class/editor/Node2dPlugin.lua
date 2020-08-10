@@ -44,7 +44,7 @@ function Node2dPlugin:update_selection()
     local selected = {}
     
     for _,c in ipairs(model:get_tree():_traverse()) do
-        if c:isInstanceOf(Node2d) then
+        if c:is_visible_in_tree() and c:isInstanceOf(Node2d) then
             if c:hit_rect(rmin, rmax) then
                 table.insert(selected, c)
             end
@@ -153,7 +153,7 @@ function Node2dPlugin:draw()
     local model = editor:get_active_scene()    
     
     for _,c in ipairs(model:get_tree():_traverse()) do
-        if c:isInstanceOf(Node2d) then
+        if c:is_visible_in_tree() and c:isInstanceOf(Node2d) then
             local sp = editor:transform_to_screen(c:get_global_position())
             local sw, sh = self:get_tree():get_viewport():get_resolution()
             
@@ -216,7 +216,7 @@ function Node2dPlugin:mousepressed(x, y, button)
         
         -- check if we hit any already selected nodes
         for _,c in ipairs(model:get_selected_nodes()) do
-            if c:isInstanceOf(Node2d) and c:hit_point(wpoint) then
+            if c:is_visible_in_tree() and c:isInstanceOf(Node2d) and c:hit_point(wpoint) then
                 node_hit = true
                 break
             end
@@ -225,7 +225,7 @@ function Node2dPlugin:mousepressed(x, y, button)
         -- Otherwise see if we hit any others
         if not node_hit then
             for _,c in ipairs(model:get_tree():_traverse_reverse()) do
-                if c:isInstanceOf(Node2d) and c:hit_point( wpoint ) then
+                if c:is_visible_in_tree() and c:isInstanceOf(Node2d) and c:hit_point( wpoint ) then
                     model:set_selected_nodes({c})
                     node_hit = true
                     break

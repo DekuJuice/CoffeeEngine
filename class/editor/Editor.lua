@@ -103,6 +103,12 @@ function Editor:initialize()
         end, "ctrl+s")
 
     self.action_dispatcher:add_action("Save As", function()
+            local model = self:get_active_scene()
+            if not model:get_tree():get_root() then
+                self:get_node("AlertModal"):show("Alert!", "The scene must have a root node to be saved.", {"Ok"})
+                return
+            end
+    
             self:get_node("SaveAsModal"):open( 
                 self:get_active_scene():get_filepath()
             )
@@ -128,6 +134,42 @@ function Editor:initialize()
             self:get_active_scene():redo()
         end, "ctrl+y")
 
+    self.action_dispatcher:add_action("Add Node", function()
+            self:get_node("AddNodeModal"):open()
+    end, "ctrl+a")
+    
+    self.action_dispatcher:add_action("Move Node Up", function()
+        local scene = self:get_active_scene()
+        local sel = scene:get_selected_nodes()[1]
+        local par = sel:get_parent()
+        if sel and par then
+            local new_i = math.max( par:get_child_index(sel) - 1, 1)
+            par:move_child(sel, new_i)
+        end
+    end,"ctrl+up")
+    
+    self.action_dispatcher:add_action("Move Node Down", function()
+        local scene = self:get_active_scene()
+        local sel = scene:get_selected_nodes()[1]
+        local par = sel:get_parent()
+        if sel and par then
+            local new_i = math.min( par:get_child_index(sel) + 1, par:get_child_count())
+
+            par:move_child(sel, new_i)
+        end
+    end,"ctrl+down")
+    
+    self.action_dispatcher:add_action("Reparent Node", function()
+        -- Open reparent 
+    end)
+    
+    self.action_dispatcher:add_action("Duplicate Node", function()
+    end, "ctrl+d")
+    
+    self.action_dispatcher:add_action("Delete Node", function()
+    end, "delete")
+
+
     self.action_dispatcher:add_action("Toggle Grid", function()
             local scene = self:get_active_scene()
             scene:set_draw_grid( not scene:get_draw_grid() )
@@ -150,9 +192,11 @@ function Editor:initialize()
     -- Add other components
     for _, p in ipairs({
         "class.editor.Console",
+        "class.editor.NodeTreeView",
         "class.editor.Node2dPlugin",
         "class.editor.CollidablePlugin",
         "class.editor.TileMapPlugin",
+        "class.editor.AddNodeModal",
         "class.editor.SaveAsModal",
         "class.editor.OpenSceneModal",
         "class.editor.AlertModal",

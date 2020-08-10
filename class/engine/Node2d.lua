@@ -36,7 +36,7 @@ function Node2d:_update_global_position()
     self.global_position = self.position + par_pos
 end
 
-function Node2d:flag_as_dirty()
+function Node2d:flag_position_dirty()
     if self.position_dirty then return end
     self.position_dirty = true
     
@@ -47,7 +47,7 @@ function Node2d:flag_as_dirty()
     
     for _,c in ipairs(self.children) do
         if c:isInstanceOf(Node2d) then
-            c:flag_as_dirty()
+            c:flag_position_dirty()
         else
             table.insert(stack, c)
         end
@@ -57,7 +57,7 @@ function Node2d:flag_as_dirty()
         local top = table.remove(stack)
         for _,c in ipairs(top.children) do
             if c:isInstanceOf(Node2d) then
-                c:flag_as_dirty()
+                c:flag_position_dirty()
             else
                 table.insert(stack, c)
             end
@@ -66,12 +66,12 @@ function Node2d:flag_as_dirty()
 end
 
 function Node2d:translate(delta)
-    self:flag_as_dirty()
+    self:flag_position_dirty()
     self.position = self.position + delta
 end
 
 function Node2d:set_position(pos)
-    self:flag_as_dirty()
+    self:flag_position_dirty()
     self.position = pos:clone()
 end
 
@@ -82,7 +82,6 @@ end
 function Node2d:get_global_position()
 
     if self.position_dirty or not self:get_parent() then
-
         self:_update_global_position()
     end
 

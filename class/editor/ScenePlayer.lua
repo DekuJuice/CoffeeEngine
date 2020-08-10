@@ -82,6 +82,7 @@ function ScenePlayer:draw()
 
     self.open = window_open
     if not self.open then   
+        self.player_tree:destroy()
         self.player_tree = nil
     end
 

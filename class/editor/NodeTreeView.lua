@@ -1,112 +1,165 @@
-local NodeSelector = require("class.editor.NodeSelector")
-local SceneSelector = require("class.editor.SceneSelector")
 
-local TreeView = require("class.editor.TreeView")
-local NodeTreeView = TreeView:subclass("NodeTreeView")
+local Node = require("class.engine.Node")
+local NodeTreeView = Node:subclass("NodeTreeView")
+NodeTreeView.static.dontlist = true
+
+local _pop_sentinel = {}
 
 function NodeTreeView:initialize()
-    TreeView.initialize(self)
-    
-    self:set_select_leaf_only(false)
-    
-    self.node_selector = NodeSelector()
-    self.node_selector:set_window_name("Select a node to add")
-    self.node_selector_selection = {}
-    
-    self.scene_selector = SceneSelector()
-    self.scene_selector:set_window_name("Select a scene to instance")
-    self.scene_selector_selection = {}
-    
-    self:set_display_extra_width(24)
+    Node.initialize(self)
+    self.is_open = true
 end
 
-function NodeTreeView:set_scene_model(sm)
-    self.scene_model = sm
+function NodeTreeView:parented(parent)
+    parent:add_action("Show Node Tree", function()
+        self.is_open = not self.is_open
+    end)
 end
 
-function NodeTreeView:get_root()
-    return self.scene_model:get_tree():get_root()
-end
+function NodeTreeView:draw()
+    local editor = self:get_parent()
 
-function NodeTreeView:get_children(node)
-    return node:get_children()
-end
-
-function NodeTreeView:is_leaf(node)
-    return node:get_child_count() == 0
-end
-
-function NodeTreeView:parent_has_child(parent, child)
-    return parent:is_parent_of(child)
-end
-
-function NodeTreeView:get_node_name(node)
-    return node:get_name()
-end
-
-function NodeTreeView:display(selected)
-
-    if imgui.Button( ("%s Add Node"):format(IconFont.PLUS_CIRCLE)) then
-        self.node_selector:set_open(true)
-    end
-    
-    imgui.SameLine()
-    
-    if imgui.Button( ("%s Instance Scene"):format( IconFont.LINK)) then
-        self.scene_selector:set_open(true)
-    end
-
-    TreeView.display(self, selected)     
-    
-    if self.node_selector:begin_window() then
-        self.node_selector:display(self.node_selector_selection)
-        self.node_selector_selection = self.node_selector:get_selection()
-        if self.node_selector:is_selection_changed() then
-            self.new_node_selected = true
+    if imgui.BeginMainMenuBar() then
+        if imgui.BeginMenu("View") then
+            editor:_menu_item("Show Node Tree", self.is_open)
+            imgui.EndMenu()
         end
+        imgui.EndMainMenuBar()
     end
-    self.node_selector:end_window()
+
+    if not self.is_open then
+        return
+    end
+
+    local model = editor:get_active_scene()
     
+    local window_flags = {}
+    imgui.SetNextWindowSize(800, 600, {"ImGuiCond_FirstUseEver"})
+
+    local flags = {}
+    local should_draw, open = imgui.Begin("Node Tree", self.is_open, flags)
+    self.is_open = open
     
-    if self.scene_selector:begin_window() then
-        self.scene_selector:display(self.scene_selector_selection)
-        self.scene_selector_selection = self.scene_selector:get_selection()
-        if self.scene_selector:is_selection_changed() then
-            self.new_scene_selected = true
+    if should_draw then
+    
+        if imgui.Button(("%s Add Node"):format(IconFont.PLUS)) then
+            editor:do_action("Add Node")
         end
+        
+        imgui.SameLine()
+        
+        if imgui.Button(("%s Instance Scene"):format(IconFont.LINK)) then
+            editor:do_action("Instance Scene")
+        end
+                
+        imgui.BeginChild("##Tree Area", -1, -1, true, {"ImGuiWindowFlags_HorizontalScrollbar"} )
+        
+        if imgui.BeginTable("##Table", 2, {"ImGuiTableFlags_RowBg", "ImGuiTableFlags_BordersVInner"}) then
+            local cw, ch = imgui.GetContentRegionAvail()
+            
+            imgui.TableSetupColumn("", nil, cw - 30);
+            imgui.TableSetupColumn("", nil, 30);
+        
+            local stack = {  model:get_tree():get_root() }
+            while #stack > 0 do
+                local top = table.remove(stack)
+                if top == _pop_sentinel then
+                    imgui.TreePop()
+                else
+                    imgui.TableNextRow()
+                    local is_leaf = #top:get_children() == 0
+                    local tree_node_flags = {
+                        "ImGuiTreeNodeFlags_OpenOnArrow", 
+                        "ImGuiTreeNodeFlags_SpanFullWidth",
+                        "ImGuiTreeNodeFlags_DefaultOpen",
+                    }
+                    
+                    if is_leaf then
+                        table.insert(tree_node_flags, "ImGuiTreeNodeFlags_Leaf")
+                    end
+                    
+                    for _, s in ipairs(model:get_selected_nodes()) do
+                        if top == s then
+                            table.insert(tree_node_flags, "ImGuiTreeNodeFlags_Selected")
+                        end
+                        
+                        if top:is_parent_of(s) then 
+                            imgui.SetNextItemOpen(true)
+                        end
+                    end
+                    imgui.TableSetColumnIndex(0)
+                    local open = imgui.TreeNodeEx(top:get_name(), tree_node_flags)
+                    
+                    if imgui.BeginPopupContextItem("NodeContextMenu") then
+                        model:set_selected_nodes({top})
+                        
+                        if top:get_parent() then
+                        
+                            editor:_menu_item("Move Node Up")
+                            editor:_menu_item("Move Node Down")
+                            editor:_menu_item("Duplicate Node")
+                            editor:_menu_item("Reparent Node")
+                        
+                        end
+                        
+                        editor:_menu_item("Delete Node")
+                        
+                        imgui.EndPopup()
+                    end
+                    
+                    
+                    if imgui.IsItemClicked(0) and not imgui.IsItemToggledOpen() then
+                        model:set_selected_nodes({top})
+                    end
+                    
+                    if open then
+                        table.insert(stack, _pop_sentinel)
+                        
+                        local children = top:get_children()
+                        for i = #children, 1, -1 do
+                            table.insert(stack, children[i])
+                        end
+                    end
+                    
+                    imgui.TableSetColumnIndex(1)
+                    
+                    local visible = top:get_visible()
+                    local visible_in_tree = top:is_visible_in_tree()
+                    local b
+                    if visible then 
+                        b = IconFont.EYE 
+                    else
+                        b = IconFont.EYE_OFF
+                    end
+                    
+                    if not visible_in_tree then
+                        imgui.PushStyleColor("ImGuiCol_Button", 0.260, 0.590, 0.980, 0.200)
+                        imgui.PushStyleColor("ImGuiCol_ButtonHovered", 0.260, 0.590, 0.980, 0.400)
+                        imgui.PushStyleColor("ImGuiCol_ButtonActive", 0.060, 0.530, 0.980, 0.200)
+                    end
+                    
+                    if imgui.Button(b) then
+                        top:set_visible(not visible)
+                    end
+                    
+                    if not visible_in_tree then
+                        imgui.PopStyleColor(3)
+                    end
+                    
+                end
+            end
+        imgui.EndTable()
+        end
+        imgui.EndChild()
+        
     end
-    self.scene_selector:end_window()
-
-end
-
-function NodeTreeView:is_new_node_selected()
-    return self.new_node_selected
-end
-
-function NodeTreeView:get_new_node()
-    return self.node_selector_selection[1]
-end
-
-function NodeTreeView:is_new_scene_selected()
-    return self.new_scene_selected
-end
-
-function NodeTreeView:get_new_scene()
-    return self.scene_selector_selection[1]
-end
-
-function NodeTreeView:end_window()
-
-    self.new_node_selected = nil
-    self.new_scene_selected = nil
     
-    TreeView.end_window(self)
+    imgui.End()
+    
+        
+
 end
 
-function NodeTreeView:display_node_extra(node)
-    imgui.SetCursorPosY(imgui.GetCursorPosY() - 3)
 
-    imgui.Button(IconFont.EYE)
-end
 
 return NodeTreeView

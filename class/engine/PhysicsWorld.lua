@@ -648,7 +648,7 @@ end
 function PhysicsWorld:debug_draw()
     -- Draw collision boxes
     for collidable in pairs(self.collidables) do
-        if collidable.draw_collision then collidable:draw_collision() end
+        if collidable:is_visible_in_tree() and collidable.draw_collision then collidable:draw_collision() end
     end
 end
 

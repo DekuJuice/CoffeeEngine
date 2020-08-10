@@ -1,5 +1,6 @@
 local Object = require("class.engine.Node")
 local TreeView = Object:subclass("TreeView")
+TreeView.static.dontlist = true
 
 TreeView:define_signal("selection_made")
 TreeView:define_get_set("modal")

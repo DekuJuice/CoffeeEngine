@@ -27,7 +27,7 @@ Node:define_get_set("filename")
 Node:export_var("name", "string", 
     {filter = function(_, name) return validate_node_name(name) end, 
     merge_mode = "merge_ends"
-    })
+})
     
 Node:export_var("tags", "data")
 Node:export_var("visible", "boolean")
@@ -38,6 +38,9 @@ function Node:initialize()
     Object.initialize(self)
     
     self.visible = true
+    self.visible_in_tree = true
+    self.visible_dirty = false
+    
     self.name = self.class.name
     self.editor_hint_is_instance = false
     self.tags = {}
@@ -109,6 +112,42 @@ function Node:_set_tree(tree)
     end
 end
 
+function Node:flag_visibility_dirty()
+    self.visible_dirty = true
+    local stack = {}
+    local children = {}
+    
+    for _,c in ipairs(self.children) do
+        table.insert(stack, c)
+    end
+    
+    while #stack > 0 do
+        local top = table.remove(stack)
+        top.visible_dirty = true
+        for _,c in ipairs(top.children) do
+            table.insert(stack, c)
+        end
+    end
+end
+
+function Node:set_visible(visible)
+    self.visible = visible
+    self:flag_visibility_dirty()
+end
+
+function Node:is_visible_in_tree()
+    if self.visible_dirty then
+        if self.parent then
+            self.visible_in_tree = self.parent:is_visible_in_tree()
+        else
+            self.visible_in_tree = true
+        end
+        self.visible_dirty = false
+    end
+
+    return self.visible and self.visible_in_tree
+end
+
 -- If child already has a parent, will reparent it to the current node
 function Node:add_child(child)
 
@@ -123,7 +162,7 @@ function Node:add_child(child)
     child.parent = self
     self:_validate_child_name(child)
     child:_set_tree(self:get_tree())
-        
+    child:flag_visibility_dirty()
     child:event("parented", self)
 end
 
@@ -134,14 +173,22 @@ function Node:remove_child(child)
             c.name_num = 1
             table.remove(self.children, i)
             
+            child:flag_visibility_dirty()
             child:event("unparented", self)
-            
             child:_set_tree(nil)
             
             return true
         end
     end
     return false
+end
+
+function Node:get_child_index(child)
+    for i,c in ipairs(self.children) do
+        if c == child then
+            return i
+        end
+    end
 end
 
 -- Callback order is dependant on child order, so this may be useful

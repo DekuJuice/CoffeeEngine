@@ -5,13 +5,13 @@ Console.static.dontlist = true
 
 function Console:initialize()
     Node.initialize(self)
-    self.open = true
+    self.is_open = true
     self.show_timestamps = true
 end
 
 function Console:parented(parent)
     parent:add_action("Show Console", function() 
-        self.open = not self.open
+        self.is_open = not self.is_open
     end, "ctrl+shift+o")
 end
 
@@ -21,17 +21,17 @@ function Console:draw()
 
     if imgui.BeginMainMenuBar() then
         if imgui.BeginMenu("View") then
-            editor:_menu_item("Show Console", self.console)
+            editor:_menu_item("Show Console", self.is_open)
             imgui.EndMenu()
         end
         imgui.EndMainMenuBar()
     end
 
-    if not self.open then return end
+    if not self.is_open then return end
 
     local flags = {}
-    local should_draw, open = imgui.Begin("Console", self.open, flags)
-    self.open = open
+    local should_draw, open = imgui.Begin("Console", self.is_open, flags)
+    self.is_open = open
     
     if should_draw then
         imgui.BeginChild("Output", -1, -1, true)

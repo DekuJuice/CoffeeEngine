@@ -43,7 +43,6 @@ function OpenSceneModal:draw()
     if should_draw then
         imgui.PushItemWidth(-1)
         imgui.BeginChild("##Tree view", 0, -28, {"ImGuiWindowFlags_HorizontalScrollbar"})
-        -- Tree view of scenes
         if imgui.BeginTable("##Table", 1, {"ImGuiTableFlags_RowBg"}) then
             local stack = { settings.get_setting("scene_dir") }
             while #stack > 0 do
