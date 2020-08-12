@@ -513,10 +513,6 @@ function love.resize(w, h)
 end
 
 function love.quit()
-    -- Doesn't matter if we don't destroy objects properly here as we're quitting the game
-    -- The nagging cause a bit of lag if we don't suppress it
-    settings.set_setting("suppress_destroy_guard_nag", true)
-
     if imgui then
         imgui.ShutDown()
     end

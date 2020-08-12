@@ -135,7 +135,7 @@ function Editor:initialize()
         end, "ctrl+y")
 
     self.action_dispatcher:add_action("Add Node", function()
-            self:get_node("AddNodeModal"):open()
+        self:get_node("AddNodeModal"):open()
     end, "ctrl+a")
     
     self.action_dispatcher:add_action("Move Node Up", function()
@@ -143,8 +143,21 @@ function Editor:initialize()
         local sel = scene:get_selected_nodes()[1]
         local par = sel:get_parent()
         if sel and par then
-            local new_i = math.max( par:get_child_index(sel) - 1, 1)
-            par:move_child(sel, new_i)
+            local old_i = par:get_child_index(sel)
+            if old_i > 1 then
+                
+                local cmd = scene:create_command("Move child up")
+                cmd:add_do_func(function()
+                    par:move_child(sel, old_i - 1)
+                end)
+                
+                cmd:add_undo_func(function()
+                    par:move_child(sel, old_i)
+                end)
+                
+                scene:commit_command(cmd)
+                
+            end
         end
     end,"ctrl+up")
     
@@ -153,20 +166,89 @@ function Editor:initialize()
         local sel = scene:get_selected_nodes()[1]
         local par = sel:get_parent()
         if sel and par then
-            local new_i = math.min( par:get_child_index(sel) + 1, par:get_child_count())
-
-            par:move_child(sel, new_i)
+            local old_i = par:get_child_index(sel)
+            if old_i < par:get_child_count() then
+                
+                local cmd = scene:create_command("Move child down")
+                cmd:add_do_func(function()
+                    par:move_child(sel, old_i + 1)
+                end)
+                
+                cmd:add_undo_func(function()
+                    par:move_child(sel, old_i)
+                end)
+                
+                scene:commit_command(cmd)
+                
+            end
         end
     end,"ctrl+down")
     
     self.action_dispatcher:add_action("Reparent Node", function()
-        -- Open reparent 
+        self:get_node("ReparentNodeModal"):open()
+        -- Open reparent modal
     end)
     
     self.action_dispatcher:add_action("Duplicate Node", function()
+        local scene = self:get_active_scene()
+        local sel = scene:get_selected_nodes()[1]
+        local par = sel:get_parent()
+        if sel and par then
+            local dupe = sel:duplicate()
+            local cmd = scene:create_command("Duplicate Node")
+            cmd:add_do_func(function() 
+                par:add_child(dupe)
+            end)
+            cmd:add_undo_func(function() 
+                par:remove_child(dupe)
+            end)
+            
+            scene:commit_command(cmd)
+        
+        end
     end, "ctrl+d")
     
     self.action_dispatcher:add_action("Delete Node", function()
+    
+        local scene = self:get_active_scene()
+        local selection = scene:get_selected_nodes()
+        local sel = selection[1]
+        if not sel then return end
+        
+        local par = sel:get_parent()
+                
+        local cmd = scene:create_command("Delete Node")
+        
+        if par then
+            local c_index = par:get_child_index(sel)
+            cmd:add_do_func(function() 
+                par:remove_child(sel)
+                scene:set_selected_nodes({})
+            end)
+            
+            cmd:add_undo_func(function()
+                par:add_child(sel)
+                par:move_child(sel, c_index)
+                scene:set_selected_nodes(selection)
+            end)
+            
+        else
+            cmd:add_do_func(function()
+                scene:get_tree():set_root(nil)
+                scene:set_selected_nodes({})
+            end)
+            
+            cmd:add_undo_func(function()
+                scene:get_tree():set_root(sel)
+                scene:set_selected_nodes(selection)
+            end)
+        end
+        
+        
+        scene:commit_command(cmd)
+        
+    
+    
     end, "delete")
 
 
@@ -197,6 +279,7 @@ function Editor:initialize()
         "class.editor.CollidablePlugin",
         "class.editor.TileMapPlugin",
         "class.editor.AddNodeModal",
+        "class.editor.ReparentNodeModal",
         "class.editor.SaveAsModal",
         "class.editor.OpenSceneModal",
         "class.editor.AlertModal",
@@ -245,13 +328,11 @@ function Editor:add_new_scene(filepath)
 end
 
 function Editor:_close_scene(index)
-
     if self.active_scene > index or self.active_scene == #self.scene_models then
         self.active_scene = self.active_scene - 1
     end
 
     local scene = table.remove(self.scene_models, index)
-    scene:destroy()
 
     if (#self.scene_models == 0) then
         self:add_new_scene()
@@ -261,7 +342,7 @@ end
 
 function Editor:_on_close_modal_button_pressed(index, button)
     if button == "Confirm" then
-        self:_close_scene(index)
+        self:_close_scene( self.active_scene )
     end
     local am = self:get_node("AlertModal")
     am:disconnect("button_pressed", self, "_on_close_modal_button_pressed")
@@ -656,11 +737,11 @@ function Editor:draw()
     --self:_draw_scene_selector()
 
     -- undo/redo stack debug
-    --[[
+
     local scene = self:get_active_scene()
     for i,v in ipairs(scene.undo_stack) do
         love.graphics.print(v.name, 200, 200 + 15 * i)
-    end]]--
+    end
 end
 
 -- Callbacks --

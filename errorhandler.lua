@@ -7,8 +7,6 @@ function love.errorhandler(msg)
 	msg = tostring(msg)
 	error_printer(msg, 2)
     
-    settings.set_setting("suppress_destroy_guard_nag", true)
- 
 	if not love.window or not love.graphics or not love.event then
 		return
 	end

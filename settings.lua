@@ -89,7 +89,6 @@ define_setting("icon", nil, {read_only})
 
 define_setting("is_debug", false, {is_boolean})
 define_setting("is_editor", false, {is_boolean})
-define_setting("suppress_destroy_guard_nag", false, {is_boolean})
 
 define_setting("game_width", 416, {is_int, is_real, curry(is_greater, 0)})
 define_setting("game_height", 240, {is_int, is_real, curry(is_greater, 0)})

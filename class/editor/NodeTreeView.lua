@@ -139,7 +139,14 @@ function NodeTreeView:draw()
                     end
                     
                     if imgui.Button(b) then
-                        top:set_visible(not visible)
+                        local cmd = model:create_command("Toggle Visibility")
+                        local func = function()
+                            top:set_visible(not top:get_visible())
+                        end
+                        cmd:add_do_func(func)
+                        cmd:add_undo_func(func)
+                        model:commit_command(cmd)
+                        
                     end
                     
                     if not visible_in_tree then

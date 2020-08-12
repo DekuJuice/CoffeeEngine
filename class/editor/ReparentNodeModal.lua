@@ -1,20 +1,20 @@
 local Node = require("class.engine.Node")
-local AddNodeModal = Node:subclass("AddNodeModal")
+local ReparentNodeModal = Node:subclass("ReparentNodeModal")
 local _pop_sentinel = {}
 
-AddNodeModal.static.dontlist = true
+ReparentNodeModal.static.dontlist = true
 
-function AddNodeModal:initialize()
+function ReparentNodeModal:initialize()
     Node.initialize(self)
     self.is_open = false
     self.selection = Node
 end
 
-function AddNodeModal:open()
+function ReparentNodeModal:open()
     self.is_open = true
 end
 
-function AddNodeModal:confirm_selection()
+function ReparentNodeModal:confirm_selection()
     local editor = self:get_parent()
     local scene = editor:get_active_scene()
     local sel = scene:get_selected_nodes()
@@ -22,14 +22,10 @@ function AddNodeModal:confirm_selection()
     if sel[1] then path = sel[1]:get_absolute_path() end
     
     local instance = self.selection()
-    local cmd = scene:create_command("Add Node")
+    local cmd = scene:create_command("Reparent Node")
     cmd:add_do_func(function()
-        scene:add_node(path, instance)
-        scene:set_selected_nodes({instance})            
     end)
     cmd:add_undo_func(function()
-        scene:remove_node(instance)
-        scene:set_selected_nodes(sel)
     end)
     
     scene:commit_command(cmd)
@@ -37,16 +33,16 @@ function AddNodeModal:confirm_selection()
     self.is_open = false
 end
 
-function AddNodeModal:draw()
+function ReparentNodeModal:draw()
     if not self.is_open then return end
     
     if self.is_open then
-        imgui.OpenPopup("Add Node")
+        imgui.OpenPopup("Reparent Node")
     end
     
     local window_flags = {}
     imgui.SetNextWindowSize(800, 600, {"ImGuiCond_FirstUseEver"})
-    local should_draw, window_open = imgui.BeginPopupModal("Add Node", self.is_open, window_flags)
+    local should_draw, window_open = imgui.BeginPopupModal("Reparent Node", self.is_open, window_flags)
     self.is_open = window_open
     
     if should_draw then
@@ -135,4 +131,4 @@ function AddNodeModal:draw()
     end
 end
 
-return AddNodeModal
+return ReparentNodeModal

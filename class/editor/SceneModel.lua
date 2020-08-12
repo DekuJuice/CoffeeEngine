@@ -15,6 +15,7 @@ function Command:initialize(name, merge_mode)
     
     self.do_vars = {}
     self.undo_vars = {}
+    self.references = {}
     self.merge_mode = merge_mode
 end
 
@@ -52,11 +53,10 @@ function Command:merge_with(other)
     -- Use the oldest command's undo, and the newest's redo. Useful for things like merging incremental changes
     elseif self.merge_mode == "merge_ends" then  
         self.do_funcs = other.do_funcs
-        self.do_vars = other.do_vars        
+        self.do_vars = other.do_vars  
     end
     
     self.merge_mode = other.merge_mode
-
 end
 
 function Command:add_do_func(func)
@@ -143,7 +143,6 @@ function SceneModel:initialize(loadpath)
     if loadpath then
         self.packed_scene = resource.get_resource(loadpath)
         if not self.packed_scene then
-            self:destroy()
             error("Failed to load scene")
         end
         
@@ -266,6 +265,7 @@ end
 
 function SceneModel:commit_command(cmd)
     self.redo_stack = {}
+
     local top = self.undo_stack[#self.undo_stack]
     
     cmd:do_command()
@@ -280,9 +280,5 @@ function SceneModel:commit_command(cmd)
     table.insert(self.undo_stack, cmd)
 end
 
-function SceneModel:destroy()
-    Object.destroy(self)
-    self.tree:destroy()
-end
 
 return SceneModel

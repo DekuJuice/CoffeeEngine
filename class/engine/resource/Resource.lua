@@ -11,7 +11,6 @@ Resource:define_get_set("serialize_full")
 
 function Resource:initialize()
     Object.initialize(self)
-    self.suppress_destroy_guard_nag = true
     self.has_unsaved_changes = true
     self.serialize_full = false
 end

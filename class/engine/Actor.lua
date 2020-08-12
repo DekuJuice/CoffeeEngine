@@ -62,6 +62,22 @@ function Actor:move_and_collide(delta)
     self.jump_down_one_way = false
 end
 
+function Actor:get_aabb_extents()
+    return self.aabb_extents:clone()
+end
+
+function Actor:set_aabb_extents(ext)
+    self.aabb_extents = ext:clone()
+end
+
+function Actor:get_aabb_offset()
+    return self.aabb_offset:clone()
+end
+
+function Actor:set_aabb_offset(offset)
+    self.aabb_offset = offset:clone()
+end
+
 function Actor:get_bounding_box()
     local gpos = self:get_global_position() + self.aabb_offset
     local rmin = gpos - self.aabb_extents

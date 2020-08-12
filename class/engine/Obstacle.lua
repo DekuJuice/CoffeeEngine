@@ -26,6 +26,14 @@ function Obstacle:move_and_collide(delta)
     world:move_obstacle(self, delta)
 end
 
+function Obstacle:get_aabb_extents()
+    return self.aabb_extents:clone()
+end
+
+function Obstacle:set_aabb_extents(ext)
+    self.aabb_extents = ext:clone()
+end
+
 function Obstacle:get_bounding_box()
     local gpos = self:get_global_position()
     local rmin = gpos - self.aabb_extents
@@ -41,6 +49,14 @@ end
 function Obstacle:hit_rect(rmin, rmax)
     local bmin, bmax = self:get_bounding_box()
     return intersect.aabb_aabb(rmin, rmax, bmin, bmax)
+end
+
+function Obstacle:get_heightmap()
+    return table.copy(self.heightmap)
+end
+
+function Obstacle:set_heightmap(heightmap)
+    self.heightmap = table.copy(heightmap)
 end
 
 function Obstacle:get_height(xoffset)

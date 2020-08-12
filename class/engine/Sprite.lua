@@ -40,14 +40,38 @@ function Sprite:_update_quad()
     end
 end
 
+function Sprite:set_offset(offset)
+    self.offset = offset:clone()
+end
+
+function Sprite:get_offset()
+    return self.offset:clone()
+end
+
+function Sprite:set_scale(scale)
+    self.scale = scale:clone()
+end
+
+function Sprite:get_scale()
+    return self.scale:clone()
+end
+
 function Sprite:set_viewport_pos(pos)
-    self.viewport_pos = pos
+    self.viewport_pos = pos:clone()
     self:_update_quad()
 end
 
+function Sprite:get_viewport_pos()
+    return self.viewport_pos:clone()
+end
+
 function Sprite:set_viewport_dimensions(dim)
-    self.viewport_dimensions = dim
+    self.viewport_dimensions = dim:clone()
     self:_update_quad()
+end
+
+function Sprite:get_viewport_dimensions()
+    return self.viewport_dimensions:clone()
 end
 
 function Sprite:set_texture(texture)
@@ -57,6 +81,14 @@ function Sprite:set_texture(texture)
         self.viewport_dimensions = vec2( texture:get_love_image():getDimensions())
         self:_update_quad()
     end
+end
+
+function Sprite:set_color(col)
+    self.color = table.copy(col)
+end
+
+function Sprite:get_color(col)
+    return table.copy(self.color)
 end
 
 function Sprite:draw()

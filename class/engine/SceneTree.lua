@@ -22,16 +22,6 @@ function SceneTree:initialize()
     self.is_editor = false
 end
 
-function SceneTree:destroy()
-    Object.destroy(self)
-    self.viewport:destroy()
-    self.physics_world:destroy()
-    if self.root then
-        self.root:destroy()
-        self.root = nil
-    end
-end
-
 function SceneTree:get_physics_world()
     return self.physics_world
 end

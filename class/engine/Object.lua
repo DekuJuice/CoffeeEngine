@@ -82,6 +82,22 @@ Object.static.binser_register = function(class)
     binser.register(class.__instanceDict, class.name, class._serialize, class._deserialize)
 end
 
+Object.static.get_signals = function(class)
+    local signals = {}
+    while class do
+    
+        if rawget(class.static, "signals") then
+            for _,name in ipairs(class.static.signals) do
+                signals[name] = true
+            end
+        end
+    
+        class = class.super
+    end
+    return signals
+end
+
+
 -- serialization saves all exported variables into a key-value table
 function Object:_serialize()
     local res = {}
@@ -104,43 +120,15 @@ function Object:_serialize()
     return res
 end
 
-local _destroy_guard_func = function(guard)
-    local mt = getmetatable(guard)
-    local obj = mt._obj
-    if not settings.get_setting("suppress_destroy_guard_nag") 
-    and not obj.suppress_destroy_guard_nag
-    and not obj.destroyed then
-        log.info(
-            ("%s was not properly destroyed before being garbage collected!"):format(tostring(obj))
-        )
-    end
-end
-
+local weak_mt = {__mode = "k"}
 function Object:initialize()
 
-    self.destroyed = false
-    if _VERSION == "Lua 5.1" then
-        -- If possible, use undocumented newproxy() function to make gc nag if 
-        -- we let an Object get garbage collected without first calling destroy on it
-        self.destroy_guard = newproxy(true)
-        local mt = getmetatable(self.destroy_guard)
-        mt.__gc = _destroy_guard_func
-        mt._obj = self
+    self.connections = {}
+    self.signals = self.class:get_signals()
+    for name in pairs(self.signals) do
+        self.signals[name] = setmetatable({}, weak_mt)
     end
 
-    self.connections = {}
-    self.signals = {}
-    
-    -- Recursively find every exposed signal and create a table for it
-    local c = self.class
-    while c do
-        if c.static.signals then
-            for _,name in ipairs(c.static.signals) do
-                self.signals[name] = {}
-            end
-        end
-        c = c.super
-    end
 end
 
 --- Connect a signal to a slot (method)
@@ -151,8 +139,17 @@ end
 function Object:connect(signal, target, method)
     assert(self.signals[signal], ("Invalid signal %s"):format(signal))
     assert(not self:is_connected(signal, target, method), "Signal is already connected")
-    table.insert( self.signals[signal], {target = target, method = method, connected = true} )
+    assert(type(target[method]) == "function", ("Invalid method %s"):format(tostring(method)))
+    
+    
+    self.signals[signal][target] = self.signals[signal][target] or {}
+    self.signals[signal][target][method] = true
+    
     -- Give connected object a reference to the connection
+    target.connections[method] = target.connections[method] or setmetatable({}, weak_mt)
+    target.connections[method][self] = target.connections[method][self] or {}
+    target.connections[method][self][signal] = true
+    
     table.insert( target.connections, {subject = self, signal = signal, method = method} )
 end
 
@@ -161,80 +158,47 @@ end
 -- target (Object) is the object connected
 -- method (string) is the name of the method in the target object
 function Object:disconnect(signal, target, method)
-    for i,c in ipairs(self.signals[signal]) do
-        if c.target == target and c.method == method then
-            c.connected = false
-            c.target:_remove_connection(self, signal, c.method)
-            table.remove(self.signals[signal], i)
-            return
-        end
-    end
-    
-    error("Signal is not connected")
+    assert(self.signals[signal], ("Invalid signal %s"):format(signal))
+    assert(type(target[method]) == "function", ("Invalid method %s"):format(tostring(method)))    
+    assert(self:is_connected(signal, target, method), "Signal is not connected" )
+
+    self.signals[signal][target][method] = nil
+    target:_remove_connection(signal, self, method)
 end
 
 -- Signals should be disconnected when an object is to be destroyed
 function Object:disconnect_all()
     for name, signals in pairs(self.signals) do
-        for _, c in ipairs(signals) do
-            c.connected = false
-            c.target:_remove_connection(self, name, c.method)
+        for target, methods in pairs(signals) do
+            for method in pairs(signals) do
+                target:_remove_connection(name, self, method)
+            end
+            signals[target] = nil
         end
-        self.signals[name] = {}
     end
     
 end
 
 function Object:is_connected(signal, target, method)
-    assert(self.signals[signal], ("Invalid signal %s"):format(signal))
-    for _,c in ipairs(self.signals[signal]) do
-        if c.target == target and c.method == method then
-            return true
-        end
-    end
-
-    return false
+    assert(self.signals[signal], ("Invalid signal %s"):format(signal))    
+    return self.signals[signal][target] and self.signals[signal][target][method]
 end
 
+-- No gurantees are made about the order signals are called in
 function Object:emit_signal(signal, ...)
     assert(self.signals[signal], ("Invalid signal %s"):format(signal))
 
-    -- Create local table containing connections, they might be 
-    -- disconnected or have their objects destroyed during signal propagation
-    local connections = {}
-    for _,c in ipairs(self.signals[signal]) do
-        table.insert( connections, c)
-    end
-    
-    for _,c in ipairs(connections) do
-        if c.connected and not c.target.destroyed then
-            c.target[c.method](c.target, ...)
+    for target, methods in pairs(self.signals[signal]) do
+        for method in pairs(methods) do
+            target[method](target, ...)
         end
     end
-end
-
--- Once you're done with an object, you should destroy it to ensure signals are properly removed
-function Object:destroy()
-    if self.destroyed then return end
-    
-    -- Disconnect all signals
-    self:disconnect_all()
-    
-    self.destroyed = true
-end
-
-function Object:is_destroyed()
-    return self.destroyed
 end
 
 -- Internal helper for disconnecting signals
-function Object:_remove_connection(subject, signal, method)
-    for i,c in ipairs(self.connections) do
-        if c.subject == subject and c.signal == signal and c.method == method then
-            table.remove(self.connections, i)
-            return
-        end
-    end
+function Object:_remove_connection(signal, subject, method)
+    local s = self.connections[method][subject]
+    s[signal] = nil    
 end
 
 return Object

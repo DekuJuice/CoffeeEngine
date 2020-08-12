@@ -1,5 +1,5 @@
 -- Base class for all Nodes
-
+local binser = require("enginelib.binser")
 local Object = require("class.engine.Object")
 local Node = Object:subclass("Node")
 
@@ -146,6 +146,17 @@ function Node:is_visible_in_tree()
     end
 
     return self.visible and self.visible_in_tree
+end
+
+function Node:duplicate()
+    -- TODO: Duplicate signals?
+    
+    local root = binser.deserialize(binser.serialize(self))[1]
+    for _,c in ipairs(self.children) do
+        self:add_child( c:duplicate() )
+    end
+    
+    return root
 end
 
 -- If child already has a parent, will reparent it to the current node
@@ -358,15 +369,6 @@ end
 
 function Node:event(name, ...)
     if self[name] then return self[name](self, ...) end
-end
-
--- This destroys all child nodes as well. If you want to preserve any, remove them
--- first before destroying
-function Node:destroy()
-    Object.destroy(self)
-    for _,v in ipairs(self.children) do
-        v:destroy()
-    end
 end
 
 return Node
