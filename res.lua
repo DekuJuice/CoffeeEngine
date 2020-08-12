@@ -4,9 +4,6 @@ local binser = require("enginelib.binser")
 
 local ImportedResource = require("class.engine.resource.ImportedResource")
 
-local IMPORT_EXT = ".import"
-local BACKUP_EXT = ".bak"
-
 local resource_cache = setmetatable({}, {__mode="v"})
 local ext_associations = {}
 
@@ -98,7 +95,7 @@ function module.get_resource(path)
     local res
 
     if rclass:isSubclassOf(ImportedResource) then
-        local import_path = path .. IMPORT_EXT
+        local import_path = path .. settings.get_setting("import_ext")
         -- Attempt to load .import file if it exists
         -- Deserializing the import file creates an instance of the resource
         if (love.filesystem.getInfo(import_path, "file")) then
@@ -190,7 +187,7 @@ function module.load_background(paths, on_complete, on_error, on_loaded)
                 local info_index = #load_info + 1
                 
                 if is_imported then
-                    local import_path = p .. IMPORT_EXT                    
+                    local import_path = p .. settings.get_setting("import_ext")                    
                     table.insert(lily_args, {"newFileData", p})
                     table.insert(lily_index_map, info_index)
                     
@@ -307,7 +304,7 @@ function module.write_file(path, data, on_complete, on_error)
     lobj:onComplete(function()
         local real_tmp = love.filesystem.getSaveDirectory() .. tname
         local real_path = love.filesystem.getWorkingDirectory() .. "/" .. path
-        local backup_path = real_path .. BACKUP_EXT
+        local backup_path = real_path .. settings.get_setting("backup_ext")
         
         -- Remove old backup
         os.remove(backup_path)
@@ -334,7 +331,7 @@ function module.save_resource(resource)
     local target_path = filepath
     
     if resource:isInstanceOf(ImportedResource) then
-        target_path = target_path .. IMPORT_EXT    
+        target_path = target_path .. settings.get_setting("import_ext")    
     end
     
     -- Resource only serialize to a reference by default

@@ -30,7 +30,7 @@ local function plot_time_graph(buffer, w, h, max_h)
 end
 
 -- LIBRARIES
-local input = require("input")
+input = require("input")
 local circularbuffer = require("enginelib.circularbuffer")
 local lily
 
@@ -304,7 +304,6 @@ function love.load(args, unfiltered_args)
     end
     
     -- Load input bindings
-    
     input.add_action("left")
     input.action_add_bind("left", "keyboard", "left")
     

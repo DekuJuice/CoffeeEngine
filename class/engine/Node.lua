@@ -30,7 +30,7 @@ Node:export_var("name", "string",
 })
     
 Node:export_var("tags", "data")
-Node:export_var("visible", "boolean")
+Node:export_var("visible", "data")
 
 Node:binser_register()
 
@@ -64,7 +64,7 @@ function Node:_validate_child_name(child)
     if not exists then return end
     
     local cur_num = tonumber(child.name:match("%d+$")) or 1
-    local base_name = child.name:sub(1, -(math.floor(math.log10(cur_num)) + 1))
+    local base_name = child.name:sub(1, -(math.ceil(math.log10(cur_num)) + 1))
     if cur_num == 1 then cur_num = 2 end
     
     local attempt

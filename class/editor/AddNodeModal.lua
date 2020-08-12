@@ -88,9 +88,9 @@ function AddNodeModal:draw()
                         imgui.PopStyleColor(1)
                     end
                     
-                    if imgui.IsItemClicked(0) then
+                    if imgui.IsItemClicked(0) and not noinstance then
                         self.selection = top
-                        if imgui.IsMouseDoubleClicked(0) and not noinstance then
+                        if imgui.IsMouseDoubleClicked(0) then
                             self:confirm_selection()
                         end
                     end
@@ -120,13 +120,15 @@ function AddNodeModal:draw()
         
         imgui.EndChild()
         
-        if imgui.Button("Confirm", 120, 0) and not rawget(self.selection.static, "noinstance") then            
+        if (imgui.Button("Confirm", 120, 0) or imgui.IsKeyPressed(imgui.GetKeyIndex("ImGuiKey_Enter")))
+        and not rawget(self.selection.static, "noinstance") then            
             self:confirm_selection()
         end
         
         imgui.SameLine()
         
-        if imgui.Button("Cancel", 120, 0) then
+        if imgui.Button("Cancel", 120, 0) 
+        or imgui.IsKeyPressed(imgui.GetKeyIndex("ImGuiKey_Escape")) then
             imgui.CloseCurrentPopup()
             self.is_open = false
         end

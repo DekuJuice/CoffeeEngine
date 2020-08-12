@@ -79,10 +79,12 @@ local function define_setting(name, default, funcs)
     validators[name] = funcs
 end
 
--- Project settings
+-- Project settings and constants
 define_setting("config_file", "config.txt", {read_only})
 define_setting("asset_dir", "assets", {read_only})
 define_setting("scene_dir", "scene", {read_only})
+define_setting("backup_ext", "bak", {read_only})
+define_setting("import_ext", "import", {read_only})
 
 define_setting("title", "CoffeeEngine", {read_only})
 define_setting("icon", nil, {read_only})

@@ -96,13 +96,15 @@ function OpenSceneModal:draw()
         
         imgui.EndChild()
         
-        if imgui.Button("Confirm", 120, 0) then            
+        if (imgui.Button("Confirm", 120, 0) or imgui.IsKeyPressed(imgui.GetKeyIndex("ImGuiKey_Enter")))
+        and self.selection then            
             self:confirm_selection()
         end
         
         imgui.SameLine()
         
-        if imgui.Button("Cancel", 120, 0) then
+        if imgui.Button("Cancel", 120, 0) 
+        or imgui.IsKeyPressed(imgui.GetKeyIndex("ImGuiKey_Escape")) then
             imgui.CloseCurrentPopup()
             self.is_open = false
         end
@@ -110,7 +112,5 @@ function OpenSceneModal:draw()
         imgui.EndPopup()
     end
 end
-
-
 
 return OpenSceneModal

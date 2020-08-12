@@ -7,25 +7,38 @@ ReparentNodeModal.static.dontlist = true
 function ReparentNodeModal:initialize()
     Node.initialize(self)
     self.is_open = false
-    self.selection = Node
+    self.selection = {}
 end
 
 function ReparentNodeModal:open()
     self.is_open = true
+    local editor = self:get_parent()
+    local scene = editor:get_active_scene()
+    self.target = scene:get_selected_nodes()[1]
+    self.selection = nil
 end
 
 function ReparentNodeModal:confirm_selection()
     local editor = self:get_parent()
     local scene = editor:get_active_scene()
-    local sel = scene:get_selected_nodes()
-    local path
-    if sel[1] then path = sel[1]:get_absolute_path() end
     
-    local instance = self.selection()
+    local old_par = self.target:get_parent()
+    local old_i = old_par:get_child_index(self.target)
+    
+    local new_par = self.selection
+    local target = self.target
+    
     local cmd = scene:create_command("Reparent Node")
     cmd:add_do_func(function()
+        old_par:remove_child(target)
+        new_par:add_child(target)
+        
+        
     end)
     cmd:add_undo_func(function()
+        new_par:remove_child(target)
+        old_par:add_child(target)
+        old_par:move_child(target, old_i)
     end)
     
     scene:commit_command(cmd)
@@ -40,6 +53,9 @@ function ReparentNodeModal:draw()
         imgui.OpenPopup("Reparent Node")
     end
     
+    local editor = self:get_parent()
+    local model = editor:get_active_scene()
+    
     local window_flags = {}
     imgui.SetNextWindowSize(800, 600, {"ImGuiCond_FirstUseEver"})
     local should_draw, window_open = imgui.BeginPopupModal("Reparent Node", self.is_open, window_flags)
@@ -49,26 +65,19 @@ function ReparentNodeModal:draw()
         imgui.PushItemWidth(-1)
         imgui.BeginChild("##Tree view", 0, -28, {"ImGuiWindowFlags_HorizontalScrollbar"})
         if imgui.BeginTable("##Table", 1, {"ImGuiTableFlags_RowBg"}) then
-            local stack = { Node }
+                    
+            local stack = {  model:get_tree():get_root() }
             while #stack > 0 do
                 local top = table.remove(stack)
                 if top == _pop_sentinel then
                     imgui.TreePop()
                 else
                     imgui.TableNextRow()
-                    local is_leaf = next(top.subclasses, nil) == nil
-                    local noinstance = rawget(top.static, "noinstance")
+                    local is_leaf = #top:get_children() == 0
                     local tree_node_flags = {
                         "ImGuiTreeNodeFlags_SpanFullWidth",
                         "ImGuiTreeNodeFlags_DefaultOpen",
                     }
-                    
-                    if noinstance then
-                        imgui.PushStyleColor("ImGuiCol_Text", 1, 1, 1, 0.5)
-                    else                    
-                        table.insert(tree_node_flags, "ImGuiTreeNodeFlags_OpenOnArrow")
-                        table.insert(tree_node_flags, "ImGuiTreeNodeFlags_OpenOnDoubleClick")
-                    end
                     
                     if is_leaf then
                         table.insert(tree_node_flags, "ImGuiTreeNodeFlags_Leaf")
@@ -76,17 +85,32 @@ function ReparentNodeModal:draw()
                     
                     if top == self.selection then
                         table.insert(tree_node_flags, "ImGuiTreeNodeFlags_Selected")
+                    elseif self.selection and top:is_parent_of(self.selection) then
+                        imgui.SetNextItemOpen(true)
                     end
                     
-                    local open = imgui.TreeNodeEx(top.name, tree_node_flags)
+                    local col_pop = 0
+                    local no_select = false
                     
-                    if noinstance then
-                        imgui.PopStyleColor(1)
+                    if top == self.target then
+                        imgui.PushStyleColor("ImGuiCol_Text", 0.446, 0.763, 1.000, 1.000)
+                        col_pop = 1
+                        no_select = true
+                    elseif self.target:is_parent_of(top) then
+                        imgui.PushStyleColor("ImGuiCol_Text", 1.000, 0.424, 0.424, 1.000)
+                        col_pop = 1
+                        no_select = true
+                    else
+                        table.insert(tree_node_flags, "ImGuiTreeNodeFlags_OpenOnArrow")
                     end
                     
-                    if imgui.IsItemClicked(0) then
+                    local open = imgui.TreeNodeEx(top:get_name(), tree_node_flags)
+                    
+                    imgui.PopStyleColor(col_pop)
+                    
+                    if not no_select and imgui.IsItemClicked(0) and not imgui.IsItemToggledOpen() then
                         self.selection = top
-                        if imgui.IsMouseDoubleClicked(0) and not noinstance then
+                        if imgui.IsMouseDoubleClicked(0) then
                             self:confirm_selection()
                         end
                     end
@@ -94,35 +118,30 @@ function ReparentNodeModal:draw()
                     if open then
                         table.insert(stack, _pop_sentinel)
                         
-                        local subclasses = {}
-                        for s in pairs(top.subclasses) do
-                            if not s.static.dontlist then
-                                table.insert(subclasses, s)
-                            end
-                        end
-                        
-                        table.sort(subclasses, function(a, b)
-                            return a.name > b.name
-                        end)
-                        
-                        for _,s in ipairs(subclasses) do
-                            table.insert(stack, s)
+                        local children = top:get_children()
+                        for i = #children, 1, -1 do
+                            table.insert(stack, children[i])
                         end
                     end
+                    
                 end
             end
-        imgui.EndTable()
+            
+            
+            imgui.EndTable()
         end
         
         imgui.EndChild()
         
-        if imgui.Button("Confirm", 120, 0) and not rawget(self.selection.static, "noinstance") then            
+        if (imgui.Button("Confirm", 120, 0) or imgui.IsKeyPressed(imgui.GetKeyIndex("ImGuiKey_Enter")))
+        and self.selection then            
             self:confirm_selection()
         end
         
         imgui.SameLine()
         
-        if imgui.Button("Cancel", 120, 0) then
+        if imgui.Button("Cancel", 120, 0) 
+        or imgui.IsKeyPressed(imgui.GetKeyIndex("ImGuiKey_Escape")) then
             imgui.CloseCurrentPopup()
             self.is_open = false
         end

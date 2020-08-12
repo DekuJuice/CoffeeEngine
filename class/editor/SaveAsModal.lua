@@ -139,14 +139,15 @@ function SaveAsModal:draw()
         end
         
         imgui.EndChild()
-        
-        if imgui.Button("Confirm", 120, 0) then            
+
+        if (imgui.Button("Confirm", 120, 0) or imgui.IsKeyPressed(imgui.GetKeyIndex("ImGuiKey_Enter"))) then            
             self:check_path()
         end
         
         imgui.SameLine()
         
-        if imgui.Button("Cancel", 120, 0) then
+        if imgui.Button("Cancel", 120, 0) 
+        or imgui.IsKeyPressed(imgui.GetKeyIndex("ImGuiKey_Escape")) then
             imgui.CloseCurrentPopup()
             self.is_open = false
         end

@@ -2,6 +2,7 @@
 local Node = require("class.engine.Node")
 local NodeTreeView = Node:subclass("NodeTreeView")
 NodeTreeView.static.dontlist = true
+NodeTreeView:define_signal("node_selected")
 
 local _pop_sentinel = {}
 
@@ -110,6 +111,7 @@ function NodeTreeView:draw()
                     
                     if imgui.IsItemClicked(0) and not imgui.IsItemToggledOpen() then
                         model:set_selected_nodes({top})
+                        self:emit_signal("node_selected", top)
                     end
                     
                     if open then
@@ -155,16 +157,15 @@ function NodeTreeView:draw()
                     
                 end
             end
-        imgui.EndTable()
+            imgui.EndTable()
         end
         imgui.EndChild()
-        
-    end
-    
-    imgui.End()
-    
-        
+        if imgui.IsWindowFocused({"ImGuiFocusedFlags_RootAndChildWindows"}) then
+            editor:get_node("Inspector"):set_auto_inspect_nodes(true)
+        end
 
+    end
+    imgui.End()
 end
 
 

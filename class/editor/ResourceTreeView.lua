@@ -1,61 +1,123 @@
-local TreeView = require("class.editor.TreeView")
-local ResourceTreeView = TreeView:subclass("ResourceTreeView")
-ResourceTreeView:define_get_set("ext_filter")
+local Node = require("class.engine.Node")
+local ResourceTreeView = Node:subclass("ResourceTreeView")
+ResourceTreeView.static.dontlist = true
+ResourceTreeView:define_signal("resource_selected")
+
+local _pop_sentinel = {}
 
 function ResourceTreeView:initialize()
-    TreeView.initialize(self)
-    self:set_select_leaf_only(true)
+    Node.initialize(self)
+    self.is_open = true
+    self.has_focus = false
+    self.selection = ""
 end
 
-function ResourceTreeView:get_root()
-    return "assets"
+function ResourceTreeView:parented(parent)
+    parent:add_action("Show Resource Tree", function()
+        self.is_open = not self.is_open
+    end)
 end
 
-function ResourceTreeView:get_children(path)
-    local children = {}
+function ResourceTreeView:draw()
+    local editor = self:get_parent()
+
+    if imgui.BeginMainMenuBar() then
+        if imgui.BeginMenu("View") then
+            editor:_menu_item("Show Resource Tree", self.is_open)
+            imgui.EndMenu()
+        end
+        imgui.EndMainMenuBar()
+    end
+
+    if not self.is_open then
+        return
+    end
+
+    local model = editor:get_active_scene()
     
-    for _,item in ipairs(love.filesystem.getDirectoryItems(path)) do
-        local info = love.filesystem.getInfo( ("%s/%s"):format(path, item ) )
-        if info.type == "directory" then
-            table.insert(children, ("%s/%s"):format(path, item))
-        elseif info.type == "file" then
-            local ext = item:match("[^.]+$")
-            local ext_ok = true
-            if ext == "import" or ext == "bak" then
-                ext_ok = false
-            end
-            
-            if self.ext_filter then
-                ext_ok = false
-                for _,v in ipairs(self.ext_filter) do
-                    if ext == v then
-                        ext_ok = true
-                        break
+    local window_flags = {}
+    imgui.SetNextWindowSize(800, 600, {"ImGuiCond_FirstUseEver"})
+
+    local flags = {}
+    local should_draw, open = imgui.Begin("Resource Tree", self.is_open, flags)
+    self.is_open = open
+    
+    if should_draw then
+        
+        if imgui.Button(("%s Create Resource"):format(IconFont.FILE)) then
+        end
+        
+        imgui.BeginChild("##Tree Area", -1, -1, true, {"ImGuiWindowFlags_HorizontalScrollbar"} )
+        
+        if imgui.BeginTable("##Table", 1, {"ImGuiTableFlags_RowBg"}) then
+
+            local stack = {  settings.get_setting("asset_dir") }
+            while #stack > 0 do
+                local top = table.remove(stack)
+                if top == _pop_sentinel then
+                    imgui.TreePop()
+                else
+                    imgui.TableNextRow()
+                    
+                    local is_leaf = love.filesystem.getInfo(top, "file") ~= nil
+                    
+                    local tree_node_flags = {
+                        "ImGuiTreeNodeFlags_SpanFullWidth",
+                        "ImGuiTreeNodeFlags_DefaultOpen",
+                    }
+                    
+                    if is_leaf then
+                        table.insert(tree_node_flags, "ImGuiTreeNodeFlags_Leaf")
+                    end
+                    
+                    if top == self.selection then
+                        table.insert(tree_node_flags, "ImGuiTreeNodeFlags_Selected")
+                    end
+                        
+                    if self.selection and top:find(self.selection) == 0 then 
+                        imgui.SetNextItemOpen(true)
+                    end
+                        
+                    local open = imgui.TreeNodeEx(top:match("[^/]+$"), tree_node_flags)
+                    
+                    if imgui.IsItemClicked(0) and not imgui.IsItemToggledOpen() and is_leaf then
+                        self.selection = top
+                        self:emit_signal("resource_selected", resource.get_resource(self.selection))
+                    end
+                    
+                    if open then
+                        table.insert(stack, _pop_sentinel)
+                        
+                        local di = love.filesystem.getDirectoryItems(top)
+                        for i = #di, 1, -1 do
+                        
+                            local cp = ("%s/%s"):format(top, di[i])
+                            if love.filesystem.getInfo(cp, "directory") then
+                                table.insert(stack, cp)
+                            else
+                                local ext = di[i]:match("[^.]+$")
+                                if ext ~= settings.get_setting("backup_ext") and ext ~= settings.get_setting("import_ext") then
+                                    table.insert(stack, cp)
+                                end
+                                
+                            end
+                        end
                     end
                 end
             end
-            
-            if ext_ok then
-                table.insert(children, ("%s/%s"):format(path, item))
-            end
+            imgui.EndTable()
+        end
+        imgui.EndChild()
+        
+        if imgui.IsWindowFocused({"ImGuiFocusedFlags_RootAndChildWindows"}) then
+            editor:get_node("Inspector"):set_auto_inspect_nodes(false)        
         end
     end
-    
-    return children
+    imgui.End()
 end
 
-function ResourceTreeView:is_leaf(path)
-    local info = love.filesystem.getInfo(path)
-    if info and info.type == "file" then return true end
-    return false
-end
 
-function ResourceTreeView:parent_has_child(p1, p2)
-    return p2:find(p1) == 1
-end
 
-function ResourceTreeView:get_node_name(path)
-    return path:match("[^/]+$")
-end
+
 
 return ResourceTreeView

@@ -9,13 +9,6 @@ local Node2d = require("class.engine.Node2d")
 local SceneModel = require("class.editor.SceneModel")
 local ActionDispatcher = require("class.editor.ActionDispatcher")
 
-local ResourceInspector = require("class.editor.ResourceInspector")
-local ResourceTreeView = require("class.editor.ResourceTreeView")
-local ResourceSelector = require("class.editor.ResourceSelector")
-local NodeTreeView = require("class.editor.NodeTreeView")
-local NodeInspector = require("class.editor.NodeInspector")
-local SceneSelector = require("class.editor.SceneSelector")
-
 local Editor = Node:subclass("Editor")
 Editor.static.dontlist = true
 
@@ -82,9 +75,6 @@ function Editor:initialize()
     self.view_pos = vec2()
     self.action_dispatcher = ActionDispatcher()
 
-    self.show_resource_inspector = true -- whether to show resource inspector or node inspector
-    self.show_inspector = true
-
     -- Add actions
     self.action_dispatcher:add_action("Save", function() 
             local model = self:get_active_scene()
@@ -97,9 +87,9 @@ function Editor:initialize()
                 self.action_dispatcher:do_action("Save As")
                 return 
             end
-            
+
             resource.save_resource(model:pack())
-            
+
         end, "ctrl+s")
 
     self.action_dispatcher:add_action("Save As", function()
@@ -108,7 +98,7 @@ function Editor:initialize()
                 self:get_node("AlertModal"):show("Alert!", "The scene must have a root node to be saved.", {"Ok"})
                 return
             end
-    
+
             self:get_node("SaveAsModal"):open( 
                 self:get_active_scene():get_filepath()
             )
@@ -134,122 +124,123 @@ function Editor:initialize()
             self:get_active_scene():redo()
         end, "ctrl+y")
 
+    self.action_dispatcher:add_action("Instance Scene", function()
+            self:get_node("InstanceSceneModal"):open()
+        end)
+
     self.action_dispatcher:add_action("Add Node", function()
-        self:get_node("AddNodeModal"):open()
-    end, "ctrl+a")
-    
+            self:get_node("AddNodeModal"):open()
+        end, "ctrl+a")
+
     self.action_dispatcher:add_action("Move Node Up", function()
-        local scene = self:get_active_scene()
-        local sel = scene:get_selected_nodes()[1]
-        local par = sel:get_parent()
-        if sel and par then
-            local old_i = par:get_child_index(sel)
-            if old_i > 1 then
-                
-                local cmd = scene:create_command("Move child up")
-                cmd:add_do_func(function()
-                    par:move_child(sel, old_i - 1)
-                end)
-                
-                cmd:add_undo_func(function()
-                    par:move_child(sel, old_i)
-                end)
-                
-                scene:commit_command(cmd)
-                
+            local scene = self:get_active_scene()
+            local sel = scene:get_selected_nodes()[1]
+            local par = sel:get_parent()
+            if sel and par then
+                local old_i = par:get_child_index(sel)
+                if old_i > 1 then
+
+                    local cmd = scene:create_command("Move child up")
+                    cmd:add_do_func(function()
+                            par:move_child(sel, old_i - 1)
+                        end)
+
+                    cmd:add_undo_func(function()
+                            par:move_child(sel, old_i)
+                        end)
+
+                    scene:commit_command(cmd)
+
+                end
             end
-        end
-    end,"ctrl+up")
-    
+        end,"ctrl+up")
+
     self.action_dispatcher:add_action("Move Node Down", function()
-        local scene = self:get_active_scene()
-        local sel = scene:get_selected_nodes()[1]
-        local par = sel:get_parent()
-        if sel and par then
-            local old_i = par:get_child_index(sel)
-            if old_i < par:get_child_count() then
-                
-                local cmd = scene:create_command("Move child down")
-                cmd:add_do_func(function()
-                    par:move_child(sel, old_i + 1)
-                end)
-                
-                cmd:add_undo_func(function()
-                    par:move_child(sel, old_i)
-                end)
-                
-                scene:commit_command(cmd)
-                
+            local scene = self:get_active_scene()
+            local sel = scene:get_selected_nodes()[1]
+            local par = sel:get_parent()
+            if sel and par then
+                local old_i = par:get_child_index(sel)
+                if old_i < par:get_child_count() then
+
+                    local cmd = scene:create_command("Move child down")
+                    cmd:add_do_func(function()
+                            par:move_child(sel, old_i + 1)
+                        end)
+
+                    cmd:add_undo_func(function()
+                            par:move_child(sel, old_i)
+                        end)
+
+                    scene:commit_command(cmd)
+
+                end
             end
-        end
-    end,"ctrl+down")
-    
+        end,"ctrl+down")
+
     self.action_dispatcher:add_action("Reparent Node", function()
-        self:get_node("ReparentNodeModal"):open()
-        -- Open reparent modal
-    end)
-    
+            self:get_node("ReparentNodeModal"):open()
+            -- Open reparent modal
+        end)
+
     self.action_dispatcher:add_action("Duplicate Node", function()
-        local scene = self:get_active_scene()
-        local sel = scene:get_selected_nodes()[1]
-        local par = sel:get_parent()
-        if sel and par then
-            local dupe = sel:duplicate()
-            local cmd = scene:create_command("Duplicate Node")
-            cmd:add_do_func(function() 
-                par:add_child(dupe)
-            end)
-            cmd:add_undo_func(function() 
-                par:remove_child(dupe)
-            end)
-            
-            scene:commit_command(cmd)
-        
-        end
-    end, "ctrl+d")
-    
+            local scene = self:get_active_scene()
+            local sel = scene:get_selected_nodes()[1]
+            local par = sel:get_parent()
+            if sel and par then
+                local dupe = sel:duplicate()
+                local cmd = scene:create_command("Duplicate Node")
+                cmd:add_do_func(function() 
+                        par:add_child(dupe)
+                    end)
+                cmd:add_undo_func(function() 
+                        par:remove_child(dupe)
+                    end)
+
+                scene:commit_command(cmd)
+
+            end
+        end, "ctrl+d")
+
     self.action_dispatcher:add_action("Delete Node", function()
-    
-        local scene = self:get_active_scene()
-        local selection = scene:get_selected_nodes()
-        local sel = selection[1]
-        if not sel then return end
-        
-        local par = sel:get_parent()
-                
-        local cmd = scene:create_command("Delete Node")
-        
-        if par then
-            local c_index = par:get_child_index(sel)
-            cmd:add_do_func(function() 
-                par:remove_child(sel)
-                scene:set_selected_nodes({})
-            end)
-            
-            cmd:add_undo_func(function()
-                par:add_child(sel)
-                par:move_child(sel, c_index)
-                scene:set_selected_nodes(selection)
-            end)
-            
-        else
-            cmd:add_do_func(function()
-                scene:get_tree():set_root(nil)
-                scene:set_selected_nodes({})
-            end)
-            
-            cmd:add_undo_func(function()
-                scene:get_tree():set_root(sel)
-                scene:set_selected_nodes(selection)
-            end)
-        end
-        
-        
-        scene:commit_command(cmd)
-        
-    
-    
-    end, "delete")
+
+            local scene = self:get_active_scene()
+            local selection = scene:get_selected_nodes()
+            local sel = selection[1]
+            if not sel then return end
+
+            local par = sel:get_parent()
+
+            local cmd = scene:create_command("Delete Node")
+
+            if par then
+                local c_index = par:get_child_index(sel)
+                cmd:add_do_func(function() 
+                        par:remove_child(sel)
+                        scene:set_selected_nodes({})
+                    end)
+
+                cmd:add_undo_func(function()
+                        par:add_child(sel)
+                        par:move_child(sel, c_index)
+                        scene:set_selected_nodes(selection)
+                    end)
+
+            else
+                cmd:add_do_func(function()
+                        scene:get_tree():set_root(nil)
+                        scene:set_selected_nodes({})
+                    end)
+
+                cmd:add_undo_func(function()
+                        scene:get_tree():set_root(sel)
+                        scene:set_selected_nodes(selection)
+                    end)
+            end
+
+            scene:commit_command(cmd)
+
+        end, "delete")
 
 
     self.action_dispatcher:add_action("Toggle Grid", function()
@@ -273,24 +264,26 @@ function Editor:initialize()
 
     -- Add other components
     for _, p in ipairs({
-        "class.editor.Console",
-        "class.editor.NodeTreeView",
-        "class.editor.Node2dPlugin",
-        "class.editor.CollidablePlugin",
-        "class.editor.TileMapPlugin",
-        "class.editor.AddNodeModal",
-        "class.editor.ReparentNodeModal",
-        "class.editor.SaveAsModal",
-        "class.editor.OpenSceneModal",
-        "class.editor.AlertModal",
-        "class.editor.ScenePlayer"
-    }) do
+            "class.editor.Console",
+            "class.editor.ResourceTreeView",
+            "class.editor.NodeTreeView",
+            "class.editor.Inspector",
+            "class.editor.Node2dPlugin",
+            "class.editor.CollidablePlugin",
+            "class.editor.TileMapPlugin",
+            "class.editor.AddNodeModal",
+            "class.editor.InstanceSceneModal",
+            "class.editor.ReparentNodeModal",
+            "class.editor.SaveAsModal",
+            "class.editor.OpenSceneModal",
+            "class.editor.AlertModal",
+            "class.editor.ScenePlayer"
+            }) do
         self:add_child(require(p)())
     end
-    
-    
-    
 
+    -- Signals
+    self:get_node("ResourceTreeView"):connect("resource_selected", self:get_node("Inspector"), "set_inspected_object" )
 end
 
 function Editor:get_active_scene()
@@ -433,7 +426,6 @@ function Editor:_draw_top_bars()
             imgui.Separator()
             self:_menu_item("Toggle Grid", self:get_active_scene():get_draw_grid() )
             imgui.Separator()
-            self:_menu_item("Show Inspector", self.show_inspector)
             imgui.EndMenu()
         end
 
@@ -585,12 +577,12 @@ function Editor:_draw_node_tree_view()
         if focus or self.node_tree_view:is_selection_changed() then
             self.show_resource_inspector = false
         end
-        
+
         if self.node_tree_view:is_new_node_selected() then -- Add new node
             local nclass = self.node_tree_view:get_new_node()
-            
+
             if not rawget(nclass.static, "noinstance") then
-            
+
                 local sel = model:get_selected_nodes()
                 local path
                 if sel[1] then path = sel[1]:get_absolute_path() end
@@ -605,13 +597,13 @@ function Editor:_draw_node_tree_view()
                         model:set_selected_nodes(sel)
                     end)
                 model:commit_command(cmd)
-            
+
             end
         end
-        
-        
-        
-        
+
+
+
+
     end
     self.node_tree_view:end_window() 
 end
@@ -649,34 +641,34 @@ function Editor:_draw_node_inspector()
         local selected = model:get_selected_nodes()[1]
         self.node_inspector:display(selected)
         if selected then
-        
+
             if self.node_inspector:is_tag_added() then
                 local tag = self.node_inspector:get_tag_arg()
                 local cmd = model:create_command("Add Tag")
                 cmd:add_do_func(function() 
-                    selected:add_tag(tag)
-                end)
-                
+                        selected:add_tag(tag)
+                    end)
+
                 cmd:add_undo_func(function()
-                    selected:remove_tag(tag)
-                end)
-                
+                        selected:remove_tag(tag)
+                    end)
+
                 model:commit_command(cmd)
-                
+
             elseif self.node_inspector:is_tag_removed() then
                 local tag = self.node_inspector:get_tag_arg()
                 local cmd = model:create_command("Remove Tag")
                 cmd:add_do_func(function()
-                    selected:remove_tag(tag)
-                end)
-                
+                        selected:remove_tag(tag)
+                    end)
+
                 cmd:add_undo_func(function()
-                    selected:add_tag(tag)
-                end)
-                
+                        selected:add_tag(tag)
+                    end)
+
                 model:commit_command(cmd)
             end        
-        
+
             if self.node_inspector:is_var_changed() then
                 local name = self.node_inspector:get_changed_var_name()
                 local v = self.node_inspector:get_changed_var_value()
@@ -719,7 +711,7 @@ function Editor:draw()
     self:_draw_scene_nodes()
     --self:_draw_resource_tree_view()
     --self:_draw_node_tree_view()
-    
+
     --[[self.resource_inspector:set_open(self.show_inspector)
     self.node_inspector:set_open(self.show_inspector)
 
