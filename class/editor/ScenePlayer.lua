@@ -40,7 +40,11 @@ end
 
 function ScenePlayer:update(dt)
     if self.open then
-        self.player_tree:update(dt)
+        local ok,err = pcall(self.player_tree.update, self.player_tree, dt)
+        if not ok then
+            log.error(err)
+            self.open = false
+        end
     end
 end
 
@@ -70,7 +74,14 @@ function ScenePlayer:draw()
         local viewport = self.player_tree:get_viewport()
         local iw, ih = viewport:get_resolution()
         
-        self.player_tree:render()
+        local ok, err = pcall( self.player_tree.render, self.player_tree)
+        if not ok then
+            log.error(err)
+            self.open = false
+            imgui.EndPopup()
+            self.player_tree = nil
+            return
+        end
         
         local sx, sy, ox, oy = scaledraw.get_transform(  self.player_tree:get_scale_mode() , iw, ih, 0, 0, rw, rh)
         

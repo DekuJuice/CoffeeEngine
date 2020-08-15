@@ -56,7 +56,7 @@ function Inspector:_draw_edit_widget(ptype, editor_hints, old_val)
         changed, new_val = imgui.DragInt("##IntSlider", old_val, velo, smin, smax)
         finalized = imgui.IsItemDeactivatedAfterEdit()
         merge_mode = "merge_ends"
-    elseif ptype == "vec2" then
+    elseif ptype:find("vec2") == 1 then
         local velo, smin, smax = 
         editor_hints.speed, editor_hints.min, editor_hints.max
 
@@ -64,7 +64,14 @@ function Inspector:_draw_edit_widget(ptype, editor_hints, old_val)
         smin = smin or 0
         smax = smax or 100
         imgui.PushItemWidth(-1)
-        local c, nx, ny = imgui.DragInt2("##Vec2Slider", old_val.x, old_val.y, velo, smin, smax)
+        
+        local c, nx, ny
+        if ptype:find("int") then
+            c, nx, ny = imgui.DragInt2("##Vec2Slider", old_val.x, old_val.y, velo, smin, smax)
+        else
+            c, nx, ny = imgui.DragFloat2("##Vec2Slider", old_val.x, old_val.y, velo, smin, smax)
+        end
+        
         finalized = imgui.IsItemDeactivatedAfterEdit()
         new_val = vec2(nx, ny)            
         changed = c

@@ -126,7 +126,7 @@ define_setting("window_x", nil, {is_int, is_real})
 define_setting("window_y", nil, {is_int, is_real})
 define_setting("centered", true, {is_boolean})
 
-define_setting("upscale_mode", "aspect", {curry(is_member, {"perfect", "free", "aspect"})})
+define_setting("upscale_mode", "perfect", {curry(is_member, {"perfect", "free", "aspect"})})
 define_setting("fullscreen", false, {is_boolean})
 define_setting("fullscreen_type", "desktop", {curry(is_member, {"desktop", "exclusive"})})
 define_setting("borderless", false, {is_boolean})

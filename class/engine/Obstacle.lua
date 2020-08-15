@@ -3,7 +3,7 @@ local intersect = require("enginelib.intersect")
 local Collidable = require("class.engine.Collidable")
 local Obstacle = Collidable:subclass("Obstacle")
 
-Obstacle:export_var("aabb_extents", "vec2", {speed = 0.2, min = 0, max = math.huge} )
+Obstacle:export_var("aabb_extents", "vec2_int", {speed = 0.2, min = 0, max = math.huge} )
 Obstacle:export_var("heightmap", "array", {array_type = "int", init_value = 0})
 Obstacle:export_var("flip_h", "bool")
 Obstacle:export_var("flip_v", "bool")

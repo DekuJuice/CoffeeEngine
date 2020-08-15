@@ -30,6 +30,18 @@ function Collidable:exit_tree()
     world:remove_collidable(self)
 end
 
+function Collidable:editor_enter_tree()
+    local tree = self:get_tree()
+    local world = tree:get_physics_world()
+    world:add_collidable(self)
+end
+
+function Collidable:editor_exit_tree() 
+    local tree = self:get_tree()
+    local world = tree:get_physics_world()
+    world:remove_collidable(self)
+end
+
 function Collidable:get_bounding_box()
     error("Unimplemented function")
 end

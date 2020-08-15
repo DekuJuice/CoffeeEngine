@@ -134,22 +134,39 @@ end
 function Node:_set_tree(tree)
 
     if tree == self.tree then return end
-
-    if tree then
-        self.tree = tree
-        self:event("enter_tree")
-    else
-        self:event("exit_tree")
-        self.tree = nil
-    end
-
-    for _,child in ipairs(self:get_children()) do
-        child:_set_tree(tree)
-    end
+    
+    -- Don't call enter/exit tree events when we're in the editor, so that
+    -- if we make any signal connections in there it won't show up in editor
     
     if tree then
-        self:event("ready")
+        self.tree = tree
+        if tree:get_is_editor() then
+            self:event("editor_enter_tree")
+        else
+            self:event("enter_tree")
+        end        
+    else
+        if self.tree:get_is_editor() then
+            self:event("editor_exit_tree")
+        else
+            self:event("exit_tree")
+        end
+        
+        self.tree = nil
     end
+    
+    for _,child in ipairs(self.children) do
+        child:_set_tree(tree)
+    end
+        
+    if tree then
+        if tree:get_is_editor() then
+            self:event("editor_ready")
+        else
+            self:event("ready")
+        end
+    end
+        
 end
 
 function Node:flag_visibility_dirty()

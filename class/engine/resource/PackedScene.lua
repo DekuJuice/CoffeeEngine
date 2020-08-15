@@ -20,7 +20,6 @@ function PackedScene:instance()
         local n = node_list[i]
         local parent = node_list[n.parent_index].node
         parent:add_child(n.node)
-        print(n.node)
     end
     
     return root

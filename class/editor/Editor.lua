@@ -417,7 +417,9 @@ function Editor:_draw_top_bars()
             self:_menu_item("Recenter View")        
             imgui.Separator()
             self:_menu_item("Toggle Grid", self:get_active_scene():get_draw_grid() )
+            self:_menu_item("Toggle Physics Debug", self:get_active_scene():get_tree():get_debug_draw_physics())
             self:_menu_item("Toggle Undo/Redo Stack Debug", self.show_stack_debug)
+
             imgui.Separator()
             imgui.EndMenu()
         end
