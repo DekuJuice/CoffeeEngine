@@ -353,10 +353,9 @@ function TileMapPlugin:draw_tile_selector()
 end
 
 function TileMapPlugin:draw_tileset_editor()
-    local editor = self:get_parent()
-    if not editor.show_resource_inspector then return end
-
-    local tileset = editor:get_inspected_resource()
+    local inspector = self:get_node("../Inspector")
+    
+    local tileset = inspector:get_inspected_object()
     if not tileset or not tileset:isInstanceOf(Tileset) then return end
 
     local x_count = tileset:get_count_x()

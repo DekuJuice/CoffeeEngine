@@ -165,6 +165,12 @@ function Player:physics_update(dt)
             self.movement_state = new
         end
     end
+        
+    local sprite = self:get_node("Sprite")
+    if sprite then
+        sprite:set_flip_h( self.direction == -1)
+    end
+    
 end
 
 function Player:draw()

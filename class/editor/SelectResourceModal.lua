@@ -1,63 +1,63 @@
-local PackedScene = require("class.engine.resource.PackedScene")
 local Node = require("class.engine.Node")
-local OpenSceneModal = Node:subclass("OpenSceneModal")
+local SelectResourceModal = Node:subclass("SelectResourceModal")
+SelectResourceModal.static.dontlist = true
+SelectResourceModal:define_signal("resource_selected")
 
 local _pop_sentinel = {}
 
-OpenSceneModal.static.dontlist = true
-
-function OpenSceneModal:initialize()
+function SelectResourceModal:initialize()
     Node.initialize(self)
     self.is_open = false
-    self.selection = settings.get_setting("scene_dir")
-    self.window_name = "Open Scene"
+    self.selection = ""
 end
 
-function OpenSceneModal:open()
+function SelectResourceModal:open(ext_filter)
     self.is_open = true
+    self.ext_filter = ext_filter or {}
 end
 
-function OpenSceneModal:confirm_selection()
-    local editor = self:get_parent()
-    if love.filesystem.getInfo(self.selection, "file") then
-        
-        local ok, err = pcall(editor.add_new_scene, editor, self.selection)
-        if err then
-            log.error(err)
-        end
-        self.is_open = false
+function SelectResourceModal:draw()
+    if not self.is_open then
+        return
     end
-end
-
-function OpenSceneModal:draw()
-    if not self.is_open then return end
     
     if self.is_open then
-        imgui.OpenPopup(self.window_name)
+        imgui.OpenPopup("Select Resource")
     end
-    
+
     local window_flags = {}
     imgui.SetNextWindowSize(800, 600, {"ImGuiCond_FirstUseEver"})
-    local should_draw, window_open = imgui.BeginPopupModal(self.window_name, self.is_open, window_flags)
-    self.is_open = window_open
+
+    local flags = {}
+    local should_draw, open = imgui.BeginPopupModal("Select Resource", self.is_open, flags)
+    self.is_open = open
     
+    local res
+    local finalized = false
+
     if should_draw then
-        imgui.PushItemWidth(-1)
-        imgui.BeginChild("##Tree view", 0, -28, {"ImGuiWindowFlags_HorizontalScrollbar"})
+        
+        if imgui.Button(("%s Create Resource"):format(IconFont.FILE)) then
+            editor:do_action("Create Resource")
+        end
+        
+        imgui.BeginChild("##Tree Area", -1, -32, true, {"ImGuiWindowFlags_HorizontalScrollbar"} )
+        
         if imgui.BeginTable("##Table", 1, {"ImGuiTableFlags_RowBg"}) then
-            local stack = { settings.get_setting("scene_dir") }
+
+            local stack = {  settings.get_setting("asset_dir") }
             while #stack > 0 do
                 local top = table.remove(stack)
                 if top == _pop_sentinel then
                     imgui.TreePop()
                 else
                     imgui.TableNextRow()
+                    
                     local is_leaf = love.filesystem.getInfo(top, "file") ~= nil
+                    
                     local tree_node_flags = {
-                        "ImGuiTreeNodeFlags_OpenOnArrow", 
                         "ImGuiTreeNodeFlags_SpanFullWidth",
                         "ImGuiTreeNodeFlags_DefaultOpen",
-                        "ImGuiTreeNodeFlags_OpenOnDoubleClick"
                     }
                     
                     if is_leaf then
@@ -67,14 +67,18 @@ function OpenSceneModal:draw()
                     if top == self.selection then
                         table.insert(tree_node_flags, "ImGuiTreeNodeFlags_Selected")
                     end
-                    
+                        
+                    if self.selection and top:find(self.selection) == 0 then 
+                        imgui.SetNextItemOpen(true)
+                    end
+                        
                     local open = imgui.TreeNodeEx(top:match("[^/]+$"), tree_node_flags)
                     
-                    if imgui.IsItemClicked(0) and not imgui.IsItemToggledOpen() then
+                    if imgui.IsItemClicked(0) and not imgui.IsItemToggledOpen() and is_leaf then
                         self.selection = top
-                        
                         if imgui.IsMouseDoubleClicked(0) then
-                            self:confirm_selection()
+                            res = resource.get_resource(self.selection)
+                            finalized = true
                         end
                     end
                     
@@ -85,21 +89,29 @@ function OpenSceneModal:draw()
                         for i = #di, 1, -1 do
                         
                             local cp = ("%s/%s"):format(top, di[i])
-                            if love.filesystem.getInfo(cp, "directory") or di[i]:match("[^.]+$") == PackedScene.static.extensions[1] then
+                            if love.filesystem.getInfo(cp, "directory") then
                                 table.insert(stack, cp)
+                            else
+                                local ext = di[i]:match("[^.]+$")
+                                if ext ~= settings.get_setting("backup_ext") and ext ~= settings.get_setting("import_ext") 
+                                and table.find(self.ext_filter, ext) then
+                                
+                                    table.insert(stack, cp)
+                                end
+                                
                             end
                         end
                     end
                 end
             end
-        imgui.EndTable()
+            imgui.EndTable()
         end
-        
         imgui.EndChild()
         
         if (imgui.Button("Confirm", 120, 0) or imgui.IsKeyPressed(imgui.GetKeyIndex("ImGuiKey_Enter")))
         and self.selection then            
-            self:confirm_selection()
+            res = resource.get_resource(self.selection)
+            finalized = true
         end
         
         imgui.SameLine()
@@ -110,8 +122,16 @@ function OpenSceneModal:draw()
             self.is_open = false
         end
         
+        if finalized then
+            self.is_open = false
+            imgui.CloseCurrentPopup()
+        end
+        
         imgui.EndPopup()
     end
+    
+    return res, finalized
 end
 
-return OpenSceneModal
+
+return SelectResourceModal

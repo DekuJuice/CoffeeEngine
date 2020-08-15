@@ -6,13 +6,13 @@ local Texture = require("class.engine.resource.Texture")
 
 Sprite:export_var("texture", "resource", {resource_type=Texture})
 Sprite:export_var("offset", "vec2" )
-Sprite:export_var("scale", "vec2", {speed = 0.01, min = 0, max=8, merge_mode = "merge_ends"} )
-Sprite:export_var("rotation", "float", {speed = 0.01, min=-math.pi * 2, max=math.pi * 2, merge_mode = "merge_ends"} )
+Sprite:export_var("scale", "vec2", {speed = 0.01, min = 0, max=8} )
+Sprite:export_var("rotation", "float", {speed = 0.01, min=-math.pi * 2, max=math.pi * 2} )
 Sprite:export_var("flip_h", "bool")
 Sprite:export_var("flip_v", "bool")
 Sprite:export_var("color", "color")
-Sprite:export_var("viewport_pos", "vec2", {min = -math.huge, max = math.huge, merge_mode = "merge_ends"} )
-Sprite:export_var("viewport_dimensions", "vec2", {min = 0, max = math.huge, merge_mode = "merge_ends"} )
+Sprite:export_var("viewport_pos", "vec2", {min = -math.huge, max = math.huge} )
+Sprite:export_var("viewport_dimensions", "vec2", {min = 0, max = math.huge} )
 
 Sprite:binser_register()
 
@@ -102,6 +102,8 @@ function Sprite:draw()
         if self.flip_v then scale.y = scale.y * -1 end
         
         offset = offset + self.viewport_dimensions / 2
+        offset.x = math.floor(offset.x)
+        offset.y = math.floor(offset.y)
         
         love.graphics.push("all")
         love.graphics.setColor(self.color)

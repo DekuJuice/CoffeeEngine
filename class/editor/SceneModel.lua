@@ -140,6 +140,7 @@ function SceneModel:initialize(loadpath)
     self.draw_grid = true
     self.grid_minor = vec2(16, 16)
     self.grid_major = vec2(416, 240)
+    
     if loadpath then
         self.packed_scene = resource.get_resource(loadpath)
         if not self.packed_scene then
@@ -157,7 +158,6 @@ function SceneModel:initialize(loadpath)
     if loadpath then
         self.tree:set_root(self.packed_scene:instance())
     end
-    
 end
 
 function SceneModel:get_name()

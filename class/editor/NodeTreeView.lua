@@ -68,7 +68,7 @@ function NodeTreeView:draw()
                     imgui.TreePop()
                 else
                     imgui.TableNextRow()
-                    local is_leaf = #top:get_children() == 0
+                    local is_leaf = (#top:get_children() == 0) or top:get_is_instance()
                     local tree_node_flags = {
                         "ImGuiTreeNodeFlags_OpenOnArrow", 
                         "ImGuiTreeNodeFlags_SpanFullWidth",
@@ -90,7 +90,7 @@ function NodeTreeView:draw()
                     end
                     imgui.TableSetColumnIndex(0)
                     local open = imgui.TreeNodeEx(top:get_name(), tree_node_flags)
-                    
+                                        
                     if imgui.BeginPopupContextItem("NodeContextMenu") then
                         model:set_selected_nodes({top})
                         
@@ -114,12 +114,20 @@ function NodeTreeView:draw()
                         self:emit_signal("node_selected", top)
                     end
                     
+                    if top:get_is_instance() then
+                        imgui.SameLine()
+                        imgui.Text(("%s"):format(IconFont.LINK))
+                    end
+                    
                     if open then
                         table.insert(stack, _pop_sentinel)
                         
                         local children = top:get_children()
                         for i = #children, 1, -1 do
-                            table.insert(stack, children[i])
+                            local c = children[i]
+                            if not c:get_is_instance() or c:get_filepath() ~= top:get_filepath() then                        
+                                table.insert(stack, c)
+                            end
                         end
                     end
                     

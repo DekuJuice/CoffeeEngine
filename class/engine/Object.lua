@@ -98,7 +98,7 @@ Object.static.get_signals = function(class)
 end
 
 
--- serialization saves all exported variables into a key-value table
+-- serialization saves all altered variables into a key-value table
 function Object:_serialize()
     local res = {}
     local cur_class = self.class
@@ -110,7 +110,10 @@ function Object:_serialize()
             if exported then
                 for _, ep in ipairs(exported) do
                     local getter = ("get_%s"):format(ep.name)
-                    table.insert(res, {ep.name, self[getter](self)})
+                    local val = self[getter](self)
+                    if val ~= ep.default then
+                        table.insert(res, {ep.name, self[getter](self)})
+                    end
                 end
             end
         end        

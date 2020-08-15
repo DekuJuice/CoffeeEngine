@@ -11,26 +11,19 @@ PackedScene:binser_register()
 function PackedScene:instance()
     
     -- Reconstruct tree
-    local scene = binser.deserialize(self.data)[1]
-    
-    -- First node is always the root
-    local root = scene.nodes[1].data
-    
-    for i = 2, #scene.nodes do        
-        local n = scene.nodes[i]
-        local parent = scene.nodes[n.parent_index].data
+    local node_list = binser.deserialize(self.data)[1]
         
-        parent:add_child(n.data)
+    -- First node is always the root
+    local root = node_list[1].node
+    
+    for i = 2, #node_list do
+        local n = node_list[i]
+        local parent = node_list[n.parent_index].node
+        parent:add_child(n.node)
+        print(n.node)
     end
     
     return root
-end
-
-local function preorder_traverse(node, list)
-    table.insert(list, node)
-    for _,c in ipairs(node:get_children()) do
-        preorder_traverse(c, list)
-    end
 end
 
 -- Packs the given root node into scene data
@@ -42,34 +35,29 @@ function PackedScene:pack(root)
     -- the tree easier
     
     local node_list = {}
-    preorder_traverse(root, node_list)
-    
     local index_map = {}
     
-    for i,n in ipairs(node_list) do
-        index_map[n] = i
-    end
-    
-    local packed_nodes = {}
-    
-    for _,n in ipairs(node_list) do
+    local stack = {root}
+    while #stack > 0 do
+        local top = table.remove(stack)
+        
         local d = {
-            data = n
+            node = top,
+            parent_index = index_map[top:get_parent()],
         }
         
-        if n:get_parent() then
-            d.parent_index = index_map[n:get_parent()]
+        table.insert(node_list, d)
+        index_map[top] = #node_list
+        
+        if not top:get_is_instance() then
+            local children = top:get_children()
+            for i = #children, 1, -1 do
+                table.insert(stack, children[i])
+            end            
         end
-        
-        
-        table.insert(packed_nodes, d)
     end
     
-    local scene = {
-        nodes = packed_nodes
-    }
-    
-    self.data = binser.serialize(scene)
+    self.data = binser.serialize(node_list)
 end
 
 return PackedScene

@@ -6,6 +6,26 @@ local Node2d = require("class.engine.Node2d")
 local Node2dPlugin = Node:subclass("Node2dPlugin")
 Node2dPlugin.static.dontlist = true
 
+local function traverse_nodes(root)
+    local n = {}
+    local stack = {root}
+    while #stack > 0 do
+        local top = table.remove(stack)
+        table.insert(n, top)
+        
+        local children = top:get_children()
+        for i = #children, 1, -1 do
+            local c = children[i]
+            if not c:get_is_instance() or c:get_filepath() ~= top:get_filepath() then                        
+                table.insert(stack, c)
+            end
+        end
+        
+    end
+    
+    return n
+end
+
 function Node2dPlugin:initialize()
     Node.initialize(self)
     
@@ -43,11 +63,11 @@ function Node2dPlugin:update_selection()
     
     local selected = {}
     
-    for _,c in ipairs(model:get_tree():_traverse()) do
-        if c:is_visible_in_tree() and c:isInstanceOf(Node2d) then
-            if c:hit_rect(rmin, rmax) then
-                table.insert(selected, c)
-            end
+    for _,c in ipairs( traverse_nodes(model:get_tree():get_root())) do
+        if c:is_visible_in_tree() 
+        and c:isInstanceOf(Node2d)
+        and c:hit_rect(rmin, rmax) then
+            table.insert(selected, c)
         end
     end
 
@@ -152,8 +172,9 @@ function Node2dPlugin:draw()
     -- Draw gizmos for node2ds
     local model = editor:get_active_scene()    
     
-    for _,c in ipairs(model:get_tree():_traverse()) do
-        if c:is_visible_in_tree() and c:isInstanceOf(Node2d) then
+    for _,c in ipairs(traverse_nodes(model:get_tree():get_root())) do
+        if c:is_visible_in_tree()
+        and c:isInstanceOf(Node2d)  then
             local sp = editor:transform_to_screen(c:get_global_position())
             local sw, sh = self:get_tree():get_viewport():get_resolution()
             
@@ -224,8 +245,12 @@ function Node2dPlugin:mousepressed(x, y, button)
         
         -- Otherwise see if we hit any others
         if not node_hit then
-            for _,c in ipairs(model:get_tree():_traverse_reverse()) do
-                if c:is_visible_in_tree() and c:isInstanceOf(Node2d) and c:hit_point( wpoint ) then
+            local nodes = traverse_nodes(model:get_tree():get_root())
+            for i = #nodes, 1, -1 do
+                local c = nodes[i]
+                if c:is_visible_in_tree() 
+                and c:isInstanceOf(Node2d) 
+                and c:hit_point( wpoint ) then
                     model:set_selected_nodes({c})
                     node_hit = true
                     break

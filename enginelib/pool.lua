@@ -36,7 +36,7 @@ function Pool:pop ( )
     local r = table.remove(self.pool)
     if not r then
         r = self.generator()
-        print(("Pool Miss! (%s)"):format(tostring(r)))
+        log.info(("Pool Miss! (%s)"):format(tostring(r)))
     end
     
     return r

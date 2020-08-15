@@ -19,18 +19,57 @@ local function validate_node_name(name)
 end
 
 -- Only used in editor
-Node:define_get_set("edit_mode") 
+Node:define_get_set("is_instance") 
 
 -- If node was instanced, the scene root will have its filename set to the file it was instanced from
-Node:define_get_set("filename")
+Node:define_get_set("filepath")
 
 Node:export_var("name", "string", 
     {filter = function(_, name) return validate_node_name(name) end, 
-    merge_mode = "merge_ends"
 })
     
 Node:export_var("tags", "data")
 Node:export_var("visible", "data")
+
+function Node:_serialize()
+    return Object._serialize(self), (self.is_instance and self.filepath) or nil
+end
+
+Node.static.binser_register = function(class)
+    if not rawget(class.static, "_deserialize") then
+        class.static._deserialize = function(data, filepath)
+            local instance
+            
+            if filepath then
+                local ps = resource.get_resource(filepath)
+                local ok, res = pcall(ps.instance, ps)
+                if ok then
+                    instance = res
+                    instance.is_instance = true
+                    instance:set_filepath(filepath)
+                else
+                    instance = class()
+                    instance.invalid = true
+                    return instance
+                end
+            else
+                instance = class()
+            end
+            
+            for _,v in ipairs(data) do
+                local key = v[1]
+                local val = v[2]
+                
+                local setter = ("set_%s"):format(key)
+                instance[setter](instance, val)
+            end
+            
+            return instance
+        end
+    end
+    
+    binser.register(class.__instanceDict, class.name, class._serialize, class._deserialize)
+end
 
 Node:binser_register()
 
@@ -42,8 +81,9 @@ function Node:initialize()
     self.visible_dirty = false
     
     self.name = self.class.name
-    self.editor_hint_is_instance = false
     self.tags = {}
+    
+    self.is_instance = false
     
     self.children = {} -- Array of children
 end

@@ -1,4 +1,5 @@
 local Node = require("class.engine.Node")
+local Node2d = require("class.engine.Node2d")
 local ReparentNodeModal = Node:subclass("ReparentNodeModal")
 local _pop_sentinel = {}
 
@@ -32,13 +33,22 @@ function ReparentNodeModal:confirm_selection()
     cmd:add_do_func(function()
         old_par:remove_child(target)
         new_par:add_child(target)
+        target:flag_visibility_dirty()
         
+        if target:isInstanceOf(Node2d) then
+            target:flag_position_dirty()
+        end
         
     end)
     cmd:add_undo_func(function()
         new_par:remove_child(target)
         old_par:add_child(target)
         old_par:move_child(target, old_i)
+        target:flag_visibility_dirty()
+        
+        if target:isInstanceOf(Node2d) then
+            target:flag_position_dirty()
+        end
     end)
     
     scene:commit_command(cmd)

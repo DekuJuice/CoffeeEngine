@@ -94,7 +94,7 @@ define_setting("is_editor", false, {is_boolean})
 
 define_setting("game_width", 416, {is_int, is_real, curry(is_greater, 0)})
 define_setting("game_height", 240, {is_int, is_real, curry(is_greater, 0)})
-define_setting("main_scene", "", {is_string})
+define_setting("main_scene", "scene/levels/debugroom.scene", {is_string})
 
 define_setting("autoload_nodes", {}, {is_table, curry(check_table, is_string)})
 

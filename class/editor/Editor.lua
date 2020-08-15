@@ -43,25 +43,7 @@ local function draw_grid(origin, rect, grid_size)
     end
 end
 
--- The first time the editor is loaded, we require every class, so that we can
--- traverse the parent classes to find subclasses. This is useful for listing them in
--- the editor
-do
-    local function preload_class(dir)
-        for _,v in ipairs(love.filesystem.getDirectoryItems(dir)) do
-            local path = dir .. "/" .. v
-            local info = love.filesystem.getInfo(path)
-            if info.type == "directory" then
-                preload_class(path)
-            else
-                require(path:match("^[^%.]+"):gsub("/", "."))
-            end
-        end
-    end
 
-    preload_class("class/engine")
-    preload_class("class/game")
-end
 
 function Editor:initialize()
 
@@ -74,6 +56,8 @@ function Editor:initialize()
     self.dragging = false
     self.view_pos = vec2()
     self.action_dispatcher = ActionDispatcher()
+    
+    self.show_stack_debug = false
 
     -- Add actions
     self.action_dispatcher:add_action("Save", function() 
@@ -139,18 +123,21 @@ function Editor:initialize()
             if sel and par then
                 local old_i = par:get_child_index(sel)
                 if old_i > 1 then
-
-                    local cmd = scene:create_command("Move child up")
-                    cmd:add_do_func(function()
-                            par:move_child(sel, old_i - 1)
-                        end)
-
-                    cmd:add_undo_func(function()
-                            par:move_child(sel, old_i)
-                        end)
-
-                    scene:commit_command(cmd)
-
+                    
+                    local above = par:get_child(old_i - 1)
+                    if not above:get_is_instance() or above:get_filepath() ~= par:get_filepath() then
+                    
+                        local cmd = scene:create_command("Move child up")
+                        cmd:add_do_func(function()
+                                par:move_child(sel, old_i - 1)
+                            end)
+                        
+                        cmd:add_undo_func(function()
+                                par:move_child(sel, old_i)
+                            end)
+                            
+                        scene:commit_command(cmd)
+                    end
                 end
             end
         end,"ctrl+up")
@@ -242,6 +229,9 @@ function Editor:initialize()
 
         end, "delete")
 
+    self.action_dispatcher:add_action("Create Resource", function()
+        self:get_node("CreateResourceModal"):open()
+    end)
 
     self.action_dispatcher:add_action("Toggle Grid", function()
             local scene = self:get_active_scene()
@@ -253,6 +243,10 @@ function Editor:initialize()
             local tree = scene:get_tree()
             tree:set_debug_draw_physics(not tree:get_debug_draw_physics())
         end, "ctrl+]")
+        
+    self.action_dispatcher:add_action("Toggle Undo/Redo Stack Debug", function()
+            self.show_stack_debug = not self.show_stack_debug
+        end, "ctrl+shift+]")
 
     self.action_dispatcher:add_action("Recenter View", function()
             self:get_active_view():set_position(vec2(0, 0))
@@ -272,6 +266,7 @@ function Editor:initialize()
             "class.editor.CollidablePlugin",
             "class.editor.TileMapPlugin",
             "class.editor.AddNodeModal",
+            "class.editor.CreateResourceModal",
             "class.editor.InstanceSceneModal",
             "class.editor.ReparentNodeModal",
             "class.editor.SaveAsModal",
@@ -284,6 +279,7 @@ function Editor:initialize()
 
     -- Signals
     self:get_node("ResourceTreeView"):connect("resource_selected", self:get_node("Inspector"), "set_inspected_object" )
+    self:get_node("CreateResourceModal"):connect("resource_created", self:get_node("Inspector"), "set_inspected_object")
 end
 
 function Editor:get_active_scene()
@@ -360,10 +356,6 @@ function Editor:transform_to_screen(point)
     return self:get_active_view():transform_to_viewport(point) + self.view_pos
 end
 
-function Editor:get_inspected_resource()
-    return self.inspected_resource
-end
-
 function Editor:draw_grid(position, scale, cellsize)
     local vw, vh = self:get_active_view():get_resolution()
     if vw <= 0 or vh <= 0 then return end
@@ -425,6 +417,7 @@ function Editor:_draw_top_bars()
             self:_menu_item("Recenter View")        
             imgui.Separator()
             self:_menu_item("Toggle Grid", self:get_active_scene():get_draw_grid() )
+            self:_menu_item("Toggle Undo/Redo Stack Debug", self.show_stack_debug)
             imgui.Separator()
             imgui.EndMenu()
         end
@@ -545,194 +538,18 @@ function Editor:_draw_scene_nodes()
     end
 end
 
-function Editor:_draw_resource_tree_view()
-    if self.resource_tree_view:begin_window() then
-        if imgui.Button(("%s Create Resource"):format(IconFont.FILE_PLUS) ) then
-            self.resource_selector:set_open(true)
-        end
-
-        self.resource_tree_view:display(self.resource_tree_view_selection)
-
-        self.resource_tree_view_selection = self.resource_tree_view:get_selection()
-        if self.resource_tree_view:is_selection_changed() then
-            self.inspected_resource = resource.get_resource(self.resource_tree_view_selection[1])
-        end
-        local focus = imgui.IsWindowFocused({"ImGuiFocusedFlags_RootAndChildWindows"})   
-        if focus or self.resource_tree_view:is_selection_changed() then
-            self.show_resource_inspector = true
-        end
-
-    end
-    self.resource_tree_view:end_window()
-end
-
-function Editor:_draw_node_tree_view()
-    -- Node Tree View
-    if self.node_tree_view:begin_window() then
-        local model = self:get_active_scene()
-        self.node_tree_view:set_scene_model(model)
-        self.node_tree_view:display( model:get_selected_nodes() )
-        model:set_selected_nodes( self.node_tree_view:get_selection() )
-        local focus = imgui.IsWindowFocused({"ImGuiFocusedFlags_RootAndChildWindows"})
-        if focus or self.node_tree_view:is_selection_changed() then
-            self.show_resource_inspector = false
-        end
-
-        if self.node_tree_view:is_new_node_selected() then -- Add new node
-            local nclass = self.node_tree_view:get_new_node()
-
-            if not rawget(nclass.static, "noinstance") then
-
-                local sel = model:get_selected_nodes()
-                local path
-                if sel[1] then path = sel[1]:get_absolute_path() end
-                local instance = nclass()
-                local cmd = model:create_command("Add Node")
-                cmd:add_do_func(function()
-                        model:add_node(path, instance)
-                        model:set_selected_nodes({instance})            
-                    end)
-                cmd:add_undo_func(function()
-                        model:remove_node(instance)
-                        model:set_selected_nodes(sel)
-                    end)
-                model:commit_command(cmd)
-
-            end
-        end
-
-
-
-
-    end
-    self.node_tree_view:end_window() 
-end
-
-function Editor:_draw_resource_inspector()
-    if self.resource_inspector:begin_window() then
-        self.resource_inspector:display(self.inspected_resource)
-        if self.inspected_resource then
-            if self.resource_inspector:is_var_changed() then
-                local k = self.resource_inspector:get_changed_var_name()
-                local v = self.resource_inspector:get_changed_var_value()
-                local setter = ("set_%s"):format(k)
-                self.inspected_resource[setter](self.inspected_resource, v)
-                self.inspected_resource:set_has_unsaved_changes(true)
-            end
-            if self.resource_inspector:is_filepath_changed() then
-                local new_path = self.resource_inspector:get_new_filepath()
-                local ext = self.inspected_resource.class.static.extensions[1]
-                if new_path:match("[^.]+$") ~= ext then
-                    new_path = ("%s.%s"):format(new_path, ext)
-                end
-                self.inspected_resource:set_filepath(new_path)            
-            end
-            if self.resource_inspector:save_pressed() then
-                resource.save_resource(self.inspected_resource)
-            end
-        end
-    end
-    self.resource_inspector:end_window()
-end
-
-function Editor:_draw_node_inspector()
-    if self.node_inspector:begin_window() then
-        local model = self:get_active_scene()
-        local selected = model:get_selected_nodes()[1]
-        self.node_inspector:display(selected)
-        if selected then
-
-            if self.node_inspector:is_tag_added() then
-                local tag = self.node_inspector:get_tag_arg()
-                local cmd = model:create_command("Add Tag")
-                cmd:add_do_func(function() 
-                        selected:add_tag(tag)
-                    end)
-
-                cmd:add_undo_func(function()
-                        selected:remove_tag(tag)
-                    end)
-
-                model:commit_command(cmd)
-
-            elseif self.node_inspector:is_tag_removed() then
-                local tag = self.node_inspector:get_tag_arg()
-                local cmd = model:create_command("Remove Tag")
-                cmd:add_do_func(function()
-                        selected:remove_tag(tag)
-                    end)
-
-                cmd:add_undo_func(function()
-                        selected:add_tag(tag)
-                    end)
-
-                model:commit_command(cmd)
-            end        
-
-            if self.node_inspector:is_var_changed() then
-                local name = self.node_inspector:get_changed_var_name()
-                local v = self.node_inspector:get_changed_var_value()
-                local old_v = selected[("get_%s"):format(name)](selected)
-                local ep = selected.class:get_exported_vars()[name]
-                local merge_mode = ep.editor_hints.merge_mode
-                if self.node_inspector:is_change_finalized() then
-                    merge_mode = nil
-                end
-                local cmd = model:create_command(("Modify %s"):format(name), merge_mode)
-                cmd:add_do_var(selected, name, v)
-                cmd:add_undo_var(selected, name, old_v)
-                model:commit_command(cmd)
-            end
-        end
-    end
-    self.node_inspector:end_window()
-
-
-end
-
-function Editor:_draw_resource_selector()
-    if self.resource_selector:begin_window() then
-        self.resource_selector:display(self.resource_selector_selection)
-        self.resource_selector_selection = self.resource_selector:get_selection()
-        if self.resource_selector:is_selection_changed() then
-            local instance = self.resource_selector_selection[1]()
-            self.inspected_resource = instance
-            self.resource_tree_view_selection = {}
-        end                
-    end
-    self.resource_selector:end_window()
-end
-
 function Editor:draw()
 
     imgui.ShowDemoWindow() 
 
     self:_draw_top_bars()
     self:_draw_scene_nodes()
-    --self:_draw_resource_tree_view()
-    --self:_draw_node_tree_view()
 
-    --[[self.resource_inspector:set_open(self.show_inspector)
-    self.node_inspector:set_open(self.show_inspector)
-
-    if self.show_resource_inspector then
-        self:_draw_resource_inspector()
-    else
-        self:_draw_node_inspector()
-    end
-    
-    if not self.node_inspector:get_open() or not self.resource_inspector:get_open() then
-        self.show_inspector = false
-    end]]--
-
-    --self:_draw_resource_selector()
-    --self:_draw_scene_selector()
-
-    -- undo/redo stack debug
-
-    local scene = self:get_active_scene()
-    for i,v in ipairs(scene.undo_stack) do
-        love.graphics.print(v.name, 200, 200 + 15 * i)
+    if self.show_stack_debug then
+        local scene = self:get_active_scene()
+        for i,v in ipairs(scene.undo_stack) do
+            love.graphics.print(v.name, 200, 200 + 15 * i)
+        end
     end
 end
 

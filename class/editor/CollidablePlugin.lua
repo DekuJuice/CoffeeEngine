@@ -94,12 +94,17 @@ function CollidablePlugin:update(dt)
         aabb_extents.x = math.floor(aabb_extents.x)
         aabb_extents.y = math.floor(aabb_extents.y)
         
-        selected:set_aabb_extents(aabb_extents)
-        
-        
-        if not love.mouse.isDown(1) then
+        local merge_mode = "merge_ends"
+        if not love.mouse.isDown(1) then            
             self.dragging = false
+            merge_mode = nil
         end
+        
+        local cmd = model:create_command("Edit Extents", merge_mode)
+        cmd:add_do_var(selected, "aabb_extents", aabb_extents)
+        cmd:add_undo_var(selected, "aabb_extents", selected:get_aabb_extents())
+        
+        model:commit_command(cmd)
         
     end
 end

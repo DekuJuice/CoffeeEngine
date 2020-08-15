@@ -288,6 +288,10 @@ function module.load_background(paths, on_complete, on_error, on_loaded)
     
 end
 
+function module.uncache_resource(res)
+    resource_cache[res:get_filepath()] = nil
+end
+
 if settings.get_setting("is_editor") then
 
 function module.write_file(path, data, on_complete, on_error)
@@ -304,7 +308,7 @@ function module.write_file(path, data, on_complete, on_error)
     lobj:onComplete(function()
         local real_tmp = love.filesystem.getSaveDirectory() .. tname
         local real_path = love.filesystem.getWorkingDirectory() .. "/" .. path
-        local backup_path = real_path .. settings.get_setting("backup_ext")
+        local backup_path = real_path .. "." .. settings.get_setting("backup_ext")
         
         -- Remove old backup
         os.remove(backup_path)
@@ -331,7 +335,7 @@ function module.save_resource(resource)
     local target_path = filepath
     
     if resource:isInstanceOf(ImportedResource) then
-        target_path = target_path .. settings.get_setting("import_ext")    
+        target_path = ("%s.%s"):format(target_path, settings.get_setting("import_ext"))
     end
     
     -- Resource only serialize to a reference by default

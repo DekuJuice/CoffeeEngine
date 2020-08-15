@@ -20,7 +20,7 @@ local TileMap = Collidable:subclass("TileMap")
 TileMap:export_var("tile_data", "data")
 TileMap:export_var("tileset", "resource", {resource_type = Tileset})
 TileMap:export_var("collision_enabled", "bool")
-TileMap:export_var("tile_size", "int", {min = 4, max = 1024, merge_mode = "merge_ends"})
+TileMap:export_var("tile_size", "int", {min = 4, max = 1024})
 
 TileMap:binser_register()
 
@@ -185,6 +185,7 @@ function TileMap:draw()
     for _,binfo in ipairs(self.sprite_batches) do
         if not visible_indices[binfo.index] then
             binfo.index = nil
+            binfo.dirty = true
         end
     end
     
@@ -197,6 +198,7 @@ function TileMap:draw()
         local index = self.tile_data:get_chunk_index(key)
         local chunk = self.tile_data:get_chunk(index)
         local sprite_batch
+        local info
             
         -- Get a free spritebatch
         for _,binfo in ipairs(self.sprite_batches) do
@@ -204,6 +206,7 @@ function TileMap:draw()
             if binfo.index == index or binfo.index == nil then
                 sprite_batch = binfo.batch
                 binfo.index = index
+                info = binfo
                 break
             end
         end
@@ -212,39 +215,45 @@ function TileMap:draw()
             sprite_batch = love.graphics.newSpriteBatch(
                 image, chunk_length ^ 2, "dynamic")
                 
-            table.insert(self.sprite_batches, {
+            local binfo = {
                 batch = sprite_batch,
-                index = index
-            })
+                index = index,
+                dirty = true
+            }
+                
+            table.insert(self.sprite_batches, binfo )
+            info = binfo
         end
             
-        sprite_batch:clear()
-            
-        -- Populate batch
-        for y = 1, chunk_length do
-            for x = 1, chunk_length do
-                local t = chunk[ (x - 1) % chunk_length + (y - 1) * chunk_length + 1]
-                if t and t > 0 then
-                    
-                    local flip_h, flip_v
-                    t, flip_h, flip_v = self:unbitmask_tile(t)
-                    
-                    local hs = self.tile_size / 2
-                    
-                    sprite_batch:add(
-                        self.quad_cache[t],
-                        (x - 1) * self.tile_size + hs, 
-                        (y - 1) * self.tile_size + hs,
-                        0,
-                        flip_h and -1 or 1,
-                        flip_v and -1 or 1,
-                        hs,
-                        hs
-                    )
+        if info.dirty then
+            info.dirty = false
+            sprite_batch:clear()
+            -- Populate batch
+            for y = 1, chunk_length do
+                for x = 1, chunk_length do
+                    local t = chunk[ (x - 1) % chunk_length + (y - 1) * chunk_length + 1]
+                    if t and t > 0 then
+                        
+                        local flip_h, flip_v
+                        t, flip_h, flip_v = self:unbitmask_tile(t)
+                        
+                        local hs = self.tile_size / 2
+                        
+                        sprite_batch:add(
+                            self.quad_cache[t],
+                            (x - 1) * self.tile_size + hs, 
+                            (y - 1) * self.tile_size + hs,
+                            0,
+                            flip_h and -1 or 1,
+                            flip_v and -1 or 1,
+                            hs,
+                            hs
+                        )
+                    end
                 end
             end
-        end
             
+        end
         -- Draw batch
         love.graphics.draw(
             sprite_batch,

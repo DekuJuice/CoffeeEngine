@@ -130,7 +130,10 @@ function SaveAsModal:draw()
                         
                         local di = love.filesystem.getDirectoryItems(top)
                         for i = #di, 1, -1 do
-                            table.insert(stack, ("%s/%s"):format(top, di[i]))
+                            local cp = ("%s/%s"):format(top, di[i])
+                            if love.filesystem.getInfo(cp, "directory") or di[i]:match("[^.]+$") == PackedScene.static.extensions[1] then
+                                table.insert(stack, cp)
+                            end
                         end
                     end
                 end
