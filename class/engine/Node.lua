@@ -140,6 +140,7 @@ function Node:_set_tree(tree)
     
     if tree then
         self.tree = tree
+        
         if tree:get_is_editor() then
             self:event("editor_enter_tree")
         else
@@ -153,6 +154,10 @@ function Node:_set_tree(tree)
         end
         
         self.tree = nil
+    end
+    
+    if self.tree ~= tree then
+        return
     end
     
     for _,child in ipairs(self.children) do

@@ -40,6 +40,80 @@ function PhysicsWorld:initialize()
     self.tilemaps = {}
 end
 
+-- For now, processing order of areas is undefined. 
+-- This can be changed later if needed
+function PhysicsWorld:physics_update(dt)
+
+    for area in pairs(self.area_shash:get_objects()) do
+        
+        local cur = area:get_collide_current()
+        
+        local rmin, rmax = area:get_bounding_box()
+        local dim = rmax - rmin
+        -- Area Actor intersections
+        local nact = self.actor_shash:get_nearby_in_rect(rmin.x, rmin.y, dim.x, dim.y)
+        for _, other in ipairs(nact) do
+            if bit.band( area:get_collision_layer(), other:get_collision_mask() ) ~= 0 then
+                if intersect.aabb_aabb(rmin, rmax, other:get_bounding_box()) then
+                    if cur[other] == nil then
+                        area:emit_signal("actor_entered", other)
+                    end
+                    cur[other] = false
+
+                end
+            end
+        end
+        
+        
+        -- Area Obstacle intersections
+        local no = self.obstacle_shash:get_nearby_in_rect(rmin.x, rmin.y, dim.x, dim.y)
+        for _,other in ipairs(no) do
+            if bit.band( area:get_collision_layer(), other:get_collision_mask() ) ~= 0 then
+                
+            end
+        end
+        
+        
+        -- Area Area intersections
+        local na = self.area_shash:get_nearby_in_rect( rmin.x, rmin.y, dim.x, dim.y)
+        for _, other in ipairs(na) do
+            if other ~= area
+            and bit.band( area:get_collision_layer() , other:get_collision_mask() ) ~= 0 then
+                if intersect.aabb_aabb(rmin, rmax, other:get_bounding_box()) then
+                    if cur[other] == nil then
+                        area:emit_signal("area_entered", other)
+                    end
+                    
+                    cur[other] = false
+                    
+                end
+            end
+        end
+        
+        for p, is_prev in pairs(cur) do
+        
+            if self:has_collidable(p) then
+                if is_prev then
+                    if p:isInstanceOf(Area) then
+                        area:emit_signal("area_exited", p)
+                    elseif p:isInstanceOf(Obstacle) then
+                        area:emit_signal("obstacle_exited", p)
+                    elseif p:isInstanceOf(Actor) then
+                        area:emit_signal("actor_exited", p)
+                    end
+                    cur[p] = nil                
+                else
+                    cur[p] = true
+                end
+            else
+                cur[p] = nil
+            end
+        end 
+    end
+
+
+end
+
 function PhysicsWorld:has_collidable(collidable)
     return self.collidables[collidable] ~= nil
 end
@@ -126,19 +200,19 @@ function PhysicsWorld:_step_actor_x(actor, sign, exclude, pushed)
     local obstacle_hit = false
     
     for _, obstacle in ipairs(nearby) do
-        if bit.band( obstacle:get_collision_layer() and actor:get_collision_mask() ) == 0 then
+        if bit.band( obstacle:get_collision_layer() , actor:get_collision_mask() ) == 0 then
             goto CONTINUE
         end
     
         local omin, omax = obstacle:get_bounding_box()
         
-        if obstacle == exclude or not intersect.aabb_aabb(nmin, nmax, omin, omax) then
+        if obstacle == exclude or not intersect.aabb_aabb_no_touch(nmin, nmax, omin, omax) then
             goto CONTINUE
         end
                 
         -- if no heightmap, treat obstacle as aabb
         local hm = obstacle:get_heightmap()
-        if #hm == 0 and not intersect.aabb_aabb(rmin, rmax, omin, omax) then
+        if #hm == 0 and not intersect.aabb_aabb_no_touch(rmin, rmax, omin, omax) then
         
             if obstacle:has_tag("one_way") then
                 goto CONTINUE
@@ -149,7 +223,7 @@ function PhysicsWorld:_step_actor_x(actor, sign, exclude, pushed)
         else
             
             -- No collision if actor was previously inside the obstacle
-            if intersect.aabb_aabb(rmin, rmax, omin, omax) then
+            if intersect.aabb_aabb_no_touch(rmin, rmax, omin, omax) then
                 local ox1, ox2 = overlap_interval(rmin.x, rmax.x, omin.x, omax.x)
                 local omax_height = 0
                 for x = ox1, ox2 - 1 do
@@ -290,13 +364,13 @@ function PhysicsWorld:_step_actor_y(actor, sign, exclude, pushed)
     local obstacle_hit = false
     
     for _, obstacle in ipairs(nearby) do
-        if bit.band( obstacle:get_collision_layer() and actor:get_collision_mask() ) == 0 then
+        if bit.band( obstacle:get_collision_layer(), actor:get_collision_mask() ) == 0 then
             goto CONTINUE
         end
     
         local omin, omax = obstacle:get_bounding_box()
         
-        if obstacle == exclude or not intersect.aabb_aabb(nmin, nmax, omin, omax) then
+        if obstacle == exclude or not intersect.aabb_aabb_no_touch(nmin, nmax, omin, omax) then
             goto CONTINUE
         end
         
@@ -305,7 +379,7 @@ function PhysicsWorld:_step_actor_y(actor, sign, exclude, pushed)
         end
         
         local hm = obstacle:get_heightmap()
-        if #hm == 0 and not intersect.aabb_aabb(rmin, rmax, omin, omax) then
+        if #hm == 0 and not intersect.aabb_aabb_no_touch(rmin, rmax, omin, omax) then
         
             if obstacle:has_tag("one_way") and rmax.y > omin.y then
                 goto CONTINUE
@@ -314,7 +388,7 @@ function PhysicsWorld:_step_actor_y(actor, sign, exclude, pushed)
             obstacle_hit = true
         else
         
-            if intersect.aabb_aabb(rmin, rmax, omin, omax) then
+            if intersect.aabb_aabb_no_touch(rmin, rmax, omin, omax) then
                 local ox1, ox2 = overlap_interval(rmin.x, rmax.x, omin.x, omax.x)
                 local omax_height = 0
                 for x = ox1, ox2 - 1 do

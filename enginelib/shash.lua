@@ -84,6 +84,10 @@ function module:has_object(obj)
     return self.objects[obj] ~= nil
 end
 
+function module:get_objects()
+    return self.objects
+end
+
 function module:remove_object(obj)
     
     assert(self:has_object(obj), "Object is not in hash")

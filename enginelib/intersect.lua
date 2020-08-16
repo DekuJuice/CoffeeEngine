@@ -1,7 +1,7 @@
 local module = {}
 
 local function line_1d_overlap(min1, max1, min2, max2)
-    return math.max(min1, min2) < math.min(max1, max2)
+    return math.min(max1, max2) - math.max(min1, min2)
 end 
 
 function module.point_aabb(point, rmin, rmax)
@@ -12,8 +12,13 @@ function module.point_aabb(point, rmin, rmax)
 end
 
 function module.aabb_aabb(rmin1, rmax1, rmin2, rmax2)
-    return line_1d_overlap( rmin1.x, rmax1.x, rmin2.x, rmax2.x)
-    and line_1d_overlap(rmin1.y, rmax1.y, rmin2.y, rmax2.y)
+    return line_1d_overlap( rmin1.x, rmax1.x, rmin2.x, rmax2.x) >= 0
+    and line_1d_overlap(rmin1.y, rmax1.y, rmin2.y, rmax2.y) >= 0
+end
+
+function module.aabb_aabb_no_touch(rmin1, rmax1, rmin2, rmax2)
+    return line_1d_overlap( rmin1.x, rmax1.x, rmin2.x, rmax2.x) > 0
+    and line_1d_overlap(rmin1.y, rmax1.y, rmin2.y, rmax2.y) > 0
 end
 
 function module.polygon_polygon(p1, p2)
@@ -54,7 +59,7 @@ function module.polygon_polygon(p1, p2)
             max2 = math.max(max2, proj)
         end
         
-        local overlaps = line_1d_overlap(min1, max1, min2, max2)
+        local overlaps = line_1d_overlap(min1, max1, min2, max2) >= 0
         if not overlaps then
             return false
         end

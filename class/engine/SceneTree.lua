@@ -54,12 +54,18 @@ end
 
 function SceneTree:update(dt)
     for _, node in ipairs(self:_traverse()) do
-        node:event("update", dt)
+        if node:get_tree() == self then
+            node:event("update", dt)
+        end
     end
     
     for _, node in ipairs(self:_traverse()) do
-        node:event("physics_update", dt)
+        if node:get_tree() == self then
+            node:event("physics_update", dt)
+        end
     end
+    
+    self.physics_world:physics_update(dt)
 end
 
 -- Iterates over root node in preorder
@@ -122,14 +128,9 @@ function SceneTree:render()
         
     local stack = {self.root}
     
-    while (#stack > 0) do
-        local top = table.remove(stack)
-        if top:get_visible() and top:get_tree() == self then
-            top:event("draw")
-            local children = top:get_children()
-            for i = #children, 1, -1 do
-                table.insert(stack, children[i])
-            end
+    for _,node in ipairs(self:_traverse()) do
+        if node:get_visible() and node:get_tree() == self then
+            node:event("draw")
         end
     end
     

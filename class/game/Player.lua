@@ -137,6 +137,23 @@ function Player:initialize()
     self.velocity_remainder = vec2(0, 0)
 end
 
+function Player:ready()
+    local hitbox = self:get_node("Hitbox")
+    if hitbox then
+        hitbox:connect("area_entered", self, "on_area_enter")
+        hitbox:connect("area_exited", self, "on_area_exit")
+    end
+    
+end
+
+function Player:on_area_enter(area)
+    print(("Enter %s"):format(area))
+end
+
+function Player:on_area_exit(area)
+    print(("Exit %s"):format(area))
+end
+
 function Player:lock_control(which)
     assert(self.control_locks[which] ~= nil, ("Invalid control lock %s"):format(tostring(which)))
     if which ~= "all" then
