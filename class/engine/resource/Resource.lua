@@ -29,7 +29,7 @@ function Resource:initialize()
 end
 
 function Resource:_serialize()
-    if self.serialize_full then
+    if self.serialize_full or not self.filepath then
         return Object._serialize(self)
     end
 

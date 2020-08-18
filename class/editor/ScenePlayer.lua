@@ -59,7 +59,7 @@ function ScenePlayer:draw()
     if not self.open then return end
         
     if self.open then
-        imgui.OpenPopup("Game")
+        imgui.OpenPopup("Game", "ImGuiPopupFlags_NoOpenOverExistingPopup")
     end
         
     local window_flags = {}

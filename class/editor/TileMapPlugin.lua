@@ -110,12 +110,6 @@ function TileMapPlugin:update()
     end
 end
 
-function TileMapPlugin:enter_tree()
-    --[[local tmap = TileMap()
-    tmap:set_tileset(resource.get_resource("assets/tilesets/Forest1.tset"))
-    self:get_parent():get_active_scene():add_node(nil, tmap)]]--
-end
-
 function TileMapPlugin:place_tiles()
     local editor = self:get_parent()
     local model = editor:get_active_scene()

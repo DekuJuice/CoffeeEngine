@@ -118,6 +118,7 @@ function Editor:initialize()
 
     self.action_dispatcher:add_action("Move Node Up", function()
             local scene = self:get_active_scene()
+            local root = scene:get_tree():get_root()
             local sel = scene:get_selected_nodes()[1]
             local par = sel:get_parent()
             if sel and par then
@@ -125,7 +126,7 @@ function Editor:initialize()
                 if old_i > 1 then
                     
                     local above = par:get_child(old_i - 1)
-                    if not above:get_is_instance() or above:get_filepath() ~= par:get_filepath() then
+                    if above:get_owner() == root then
                     
                         local cmd = scene:create_command("Move child up")
                         cmd:add_do_func(function()
@@ -265,6 +266,7 @@ function Editor:initialize()
             "class.editor.Node2dPlugin",
             "class.editor.CollidablePlugin",
             "class.editor.TileMapPlugin",
+            "class.editor.AnimationPlugin",
             "class.editor.AddNodeModal",
             "class.editor.CreateResourceModal",
             "class.editor.InstanceSceneModal",

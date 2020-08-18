@@ -18,19 +18,36 @@ function AddNodeModal:confirm_selection()
     local editor = self:get_parent()
     local scene = editor:get_active_scene()
     local sel = scene:get_selected_nodes()
-    local path
-    if sel[1] then path = sel[1]:get_absolute_path() end
+    local tree = scene:get_tree()
     
     local instance = self.selection()
     local cmd = scene:create_command("Add Node")
-    cmd:add_do_func(function()
-        scene:add_node(path, instance)
-        scene:set_selected_nodes({instance})            
-    end)
-    cmd:add_undo_func(function()
-        scene:remove_node(instance)
-        scene:set_selected_nodes(sel)
-    end)
+    
+    local root = tree:get_root()
+    if root then
+        local par = root
+        if sel[1] then par = sel[1] end
+        
+        cmd:add_do_func(function()
+            par:add_child(instance)
+            instance:set_owner(root)
+            scene:set_selected_nodes({instance})            
+        end)
+        cmd:add_undo_func(function()
+            par:remove_child(instance)
+            scene:set_selected_nodes(sel)
+        end)
+
+    else
+        cmd:add_do_var(tree, "root", instance)
+        cmd:add_do_func(function()
+            scene:set_selected_nodes({instance})
+        end)
+        cmd:add_undo_var(tree, "root", nil)
+        cmd:add_undo_func(function()
+            scene:set_selected_nodes({})
+        end)
+    end
     
     scene:commit_command(cmd)
     
@@ -41,7 +58,7 @@ function AddNodeModal:draw()
     if not self.is_open then return end
     
     if self.is_open then
-        imgui.OpenPopup("Add Node")
+        imgui.OpenPopup("Add Node", "ImGuiPopupFlags_NoOpenOverExistingPopup")
     end
     
     local window_flags = {}
@@ -81,8 +98,12 @@ function AddNodeModal:draw()
                     if top == self.selection then
                         table.insert(tree_node_flags, "ImGuiTreeNodeFlags_Selected")
                     end
+                    local dname = top:get_name()
+                    if top.icon then
+                        dname = ("%s %s"):format(top.icon, dname)
+                    end
                     
-                    local open = imgui.TreeNodeEx(top.name, tree_node_flags)
+                    local open = imgui.TreeNodeEx(dname, tree_node_flags)
                     
                     if noinstance then
                         imgui.PopStyleColor(1)

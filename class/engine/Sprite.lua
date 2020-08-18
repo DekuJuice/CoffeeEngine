@@ -2,6 +2,8 @@ local intersect = require("enginelib.intersect")
 
 local Node2d = require("class.engine.Node2d")
 local Sprite = Node2d:subclass("Sprite")
+Sprite.static.icon = IconFont and IconFont.IMAGE
+
 local Texture = require("class.engine.resource.Texture")
 
 Sprite:export_var("texture", "resource", {resource_type=Texture})

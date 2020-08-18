@@ -2,6 +2,7 @@
 local binser = require("enginelib.binser")
 local Object = require("class.engine.Object")
 local Node = Object:subclass("Node")
+Node.static.icon = IconFont and IconFont.CIRCLE
 
 local function validate_node_name(name)
     if name:len() == 0 then return false end
@@ -19,10 +20,8 @@ local function validate_node_name(name)
 end
 
 -- Only used in editor
-Node:define_get_set("is_instance") 
-
--- If node was instanced, the scene root will have its filename set to the file it was instanced from
-Node:define_get_set("filepath")
+Node:define_get_set("owner") 
+Node:define_get_set("filepath") -- If node was instanced, the scene root will have its filename set to the file it was instanced from
 
 Node:export_var("name", "string", 
     {filter = function(_, name) return validate_node_name(name) end, 
@@ -30,9 +29,9 @@ Node:export_var("name", "string",
     
 Node:export_var("tags", "data")
 Node:export_var("visible", "data")
-
+--[[
 function Node:_serialize()
-    return Object._serialize(self), (self.is_instance and self.filepath) or nil
+    return Object._serialize(self)
 end
 
 Node.static.binser_register = function(class)
@@ -70,6 +69,7 @@ Node.static.binser_register = function(class)
     
     binser.register(class.__instanceDict, class.name, class._serialize, class._deserialize)
 end
+]]--
 
 Node:binser_register()
 
@@ -221,6 +221,14 @@ function Node:duplicate()
     return root
 end
 
+function Node:set_owner(owner)
+    if owner then
+        assert(owner:is_parent_of(self), "Owner must be a parent of the node" )
+    end
+    
+    self.owner = owner
+end
+
 -- If child already has a parent, will reparent it to the current node
 function Node:add_child(child)
 
@@ -249,6 +257,7 @@ function Node:remove_child(child)
             child:flag_visibility_dirty()
             child:event("unparented", self)
             child:_set_tree(nil)
+            child:propagate_event_preorder("set_owner", false, nil)
             
             return true
         end
@@ -431,6 +440,18 @@ end
 
 function Node:event(name, ...)
     if self[name] then return self[name](self, ...) end
+end
+
+function Node:_print_tree(indent_level)
+    print(string.rep("\t", indent_level) .. self:get_name())
+
+    for _,c in ipairs(self.children) do
+        c:_print_tree(indent_level + 1)    
+    end
+end
+
+function Node:print_tree()
+    self:_print_tree(0) 
 end
 
 return Node

@@ -19,7 +19,7 @@ function AlertModal:draw()
     if not self.open then return end
     
     if self.open then
-        imgui.OpenPopup(self.title)
+        imgui.OpenPopup(self.title, "ImGuiPopupFlags_NoOpenOverExistingPopup")
     end
 
     local window_flags = {"ImGuiWindowFlags_AlwaysAutoResize"}

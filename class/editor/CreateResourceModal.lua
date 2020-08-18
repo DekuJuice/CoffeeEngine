@@ -32,7 +32,7 @@ function CreateResourceModal:draw()
     if not self.is_open then return end
     
     if self.is_open then
-        imgui.OpenPopup("Create Resource")
+        imgui.OpenPopup("Create Resource", "ImGuiPopupFlags_NoOpenOverExistingPopup")
     end
     
     local model = editor:get_active_scene()

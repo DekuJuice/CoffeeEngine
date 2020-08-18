@@ -33,7 +33,7 @@ function OpenSceneModal:draw()
     if not self.is_open then return end
     
     if self.is_open then
-        imgui.OpenPopup(self.window_name)
+        imgui.OpenPopup(self.window_name, "ImGuiPopupFlags_NoOpenOverExistingPopup")
     end
     
     local window_flags = {}

@@ -42,7 +42,7 @@ function Console:draw()
         end
         
         if  imgui.GetScrollY() >= imgui.GetScrollMaxY() then
-            imgui.SetScrollHere(1);
+            imgui.SetScrollHereY(1);
         end
         
         imgui.EndChild()

@@ -16,9 +16,7 @@ local function traverse_nodes(root)
         local children = top:get_children()
         for i = #children, 1, -1 do
             local c = children[i]
-            if not c:get_is_instance() or c:get_filepath() ~= top:get_filepath() then                        
-                table.insert(stack, c)
-            end
+            table.insert(stack, c)
         end
         
     end

@@ -110,8 +110,8 @@ function ResourceTreeView:draw()
         end
         imgui.EndChild()
         
-        if imgui.IsWindowFocused({"ImGuiFocusedFlags_RootAndChildWindows"}) then
-            editor:get_node("Inspector"):set_auto_inspect_nodes(false)        
+        if imgui.IsWindowFocused("ImGuiFocusedFlags_RootAndChildWindows") then
+            editor:get_node("Inspector"):set_auto_inspect_nodes(false)
         end
     end
     imgui.End()

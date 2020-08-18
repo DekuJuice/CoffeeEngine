@@ -3,6 +3,7 @@ local intersect = require("enginelib.intersect")
 local Collidable = require("class.engine.Collidable")
 local Actor = Collidable:subclass("Actor")
 Actor.static.noinstance = true
+Actor.static.icon = IconFont and IconFont.USER
 
 Actor:export_var("aabb_extents", "vec2_int", {speed = 0.2, min = 0, max = math.huge} )
 Actor:export_var("aabb_offset", "vec2_int", {speed = 0.2, min = -math.huge, max = math.huge})

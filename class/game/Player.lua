@@ -182,11 +182,18 @@ function Player:physics_update(dt)
             self.movement_state = new
         end
     end
-        
+    
     local sprite = self:get_node("Sprite")
     if sprite then
         sprite:set_flip_h( self.direction == -1)
     end
+    
+    local hitbox = self:get_node("Hitbox")
+    if hitbox then
+        hitbox:set_aabb_extents(self:get_aabb_extents())
+        hitbox:set_aabb_offset(self:get_aabb_offset())
+    end
+    
     
 end
 

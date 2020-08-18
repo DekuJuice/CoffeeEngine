@@ -22,6 +22,7 @@ end
 function ReparentNodeModal:confirm_selection()
     local editor = self:get_parent()
     local scene = editor:get_active_scene()
+    local root = scene:get_tree():get_root()
     
     local old_par = self.target:get_parent()
     local old_i = old_par:get_child_index(self.target)
@@ -33,6 +34,8 @@ function ReparentNodeModal:confirm_selection()
     cmd:add_do_func(function()
         old_par:remove_child(target)
         new_par:add_child(target)
+
+        target:set_owner(root)
         target:flag_visibility_dirty()
         
         if target:isInstanceOf(Node2d) then
@@ -44,6 +47,8 @@ function ReparentNodeModal:confirm_selection()
         new_par:remove_child(target)
         old_par:add_child(target)
         old_par:move_child(target, old_i)
+        
+        target:set_owner(root)
         target:flag_visibility_dirty()
         
         if target:isInstanceOf(Node2d) then
@@ -60,7 +65,7 @@ function ReparentNodeModal:draw()
     if not self.is_open then return end
     
     if self.is_open then
-        imgui.OpenPopup("Reparent Node")
+        imgui.OpenPopup("Reparent Node", "ImGuiPopupFlags_NoOpenOverExistingPopup")
     end
     
     local editor = self:get_parent()
@@ -75,15 +80,24 @@ function ReparentNodeModal:draw()
         imgui.PushItemWidth(-1)
         imgui.BeginChild("##Tree view", 0, -28, {"ImGuiWindowFlags_HorizontalScrollbar"})
         if imgui.BeginTable("##Table", 1, {"ImGuiTableFlags_RowBg"}) then
-                    
-            local stack = {  model:get_tree():get_root() }
+            
+            local root = model:get_tree():get_root()
+            local stack = {  root }
             while #stack > 0 do
                 local top = table.remove(stack)
                 if top == _pop_sentinel then
                     imgui.TreePop()
                 else
                     imgui.TableNextRow()
-                    local is_leaf = #top:get_children() == 0
+                    local is_leaf = true
+                    for _,c in ipairs(top:get_children()) do
+                        if c:get_owner() == root then
+                            is_leaf = false
+                            break
+                        end
+                    end
+                    
+                    
                     local tree_node_flags = {
                         "ImGuiTreeNodeFlags_SpanFullWidth",
                         "ImGuiTreeNodeFlags_DefaultOpen",
@@ -114,7 +128,12 @@ function ReparentNodeModal:draw()
                         table.insert(tree_node_flags, "ImGuiTreeNodeFlags_OpenOnArrow")
                     end
                     
-                    local open = imgui.TreeNodeEx(top:get_name(), tree_node_flags)
+                    local dname = top:get_name()
+                    if top.class.icon then
+                        dname = ("%s %s"):format(top.class.icon, dname)
+                    end
+                    
+                    local open = imgui.TreeNodeEx(dname, tree_node_flags)
                     
                     imgui.PopStyleColor(col_pop)
                     
@@ -125,12 +144,20 @@ function ReparentNodeModal:draw()
                         end
                     end
                     
+                    if top:get_filepath() then
+                        imgui.SameLine()
+                        imgui.Text(("%s"):format(IconFont.LINK))
+                    end
+                    
                     if open then
                         table.insert(stack, _pop_sentinel)
                         
                         local children = top:get_children()
                         for i = #children, 1, -1 do
-                            table.insert(stack, children[i])
+                            local c = children[i]
+                            if c:get_owner() == root then
+                                table.insert(stack, children[i])
+                            end
                         end
                     end
                     

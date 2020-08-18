@@ -16,6 +16,7 @@ local tile_placehold_pool = pool.new(function() return TilePlaceholder() end)
 tile_placehold_pool:generate(100)
 
 local TileMap = Collidable:subclass("TileMap")
+TileMap.static.icon = IconFont and IconFont.GRID
 
 TileMap:export_var("tile_data", "data")
 TileMap:export_var("tileset", "resource", {resource_type = Tileset})

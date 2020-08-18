@@ -156,7 +156,11 @@ function SceneModel:initialize(loadpath)
     self.tree:set_is_editor(true)
     
     if loadpath then
-        self.tree:set_root(self.packed_scene:instance())
+        local root = self.packed_scene:instance()
+        root:set_filepath(nil)
+        
+        self.tree:set_root(root)
+        
     end
 end
 
@@ -202,36 +206,8 @@ function SceneModel:is_selected(node)
     return false
 end
 
-function SceneModel:add_node(path, node)
-    local root = self:get_tree():get_root()
-    if root then
-        
-        local parent = root
-        if path then
-            parent = root:get_node(path)
-            assert(parent, "Invalid path " .. path)
-        end
-        
-        parent:add_child(node)
-        
-    else
-        self:get_tree():set_root(node)        
-    end
-end
-
-function SceneModel:remove_node(instance)
-    assert(instance:get_tree() == self:get_tree(), "Invalid instance")
-    if instance:get_parent() then
-        instance:get_parent():remove_child(instance)
-    else
-        -- No parent, must be root node
-        self:get_tree():set_root(nil)
-    end
-
-end
-
 function SceneModel:set_modified(modified)
-    self.packed_scene:set_has_unsaved_changes()
+    self.packed_scene:set_has_unsaved_changes(modified)
 end
 
 function SceneModel:get_modified()
@@ -245,6 +221,7 @@ function SceneModel:undo()
     command:undo_command()
 
     table.insert(self.redo_stack, command)
+    self:set_modified(true)
     
 end
 
@@ -256,7 +233,7 @@ function SceneModel:redo()
     command:do_command()
     
     table.insert(self.undo_stack, command)
-    
+    self:set_modified(true)
 end
 
 function SceneModel:create_command(name, merge_mode)
@@ -277,6 +254,7 @@ function SceneModel:commit_command(cmd)
         end
     end
     
+    self:set_modified(true)
     table.insert(self.undo_stack, cmd)
 end
 

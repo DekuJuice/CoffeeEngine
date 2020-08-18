@@ -22,7 +22,7 @@ function SelectResourceModal:draw()
     end
     
     if self.is_open then
-        imgui.OpenPopup("Select Resource")
+        imgui.OpenPopup("Select Resource", "ImGuiPopupFlags_NoOpenOverExistingPopup")
     end
 
     local window_flags = {}

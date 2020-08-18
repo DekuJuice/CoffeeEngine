@@ -72,7 +72,7 @@ function SaveAsModal:draw()
     if not self.is_open then return end
     
     if self.is_open then
-        imgui.OpenPopup("Save As")
+        imgui.OpenPopup("Save As", "ImGuiPopupFlags_NoOpenOverExistingPopup")
     end
     
     local window_flags = {}

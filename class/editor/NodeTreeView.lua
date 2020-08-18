@@ -60,15 +60,26 @@ function NodeTreeView:draw()
             
             imgui.TableSetupColumn("", nil, cw - 30);
             imgui.TableSetupColumn("", nil, 30);
-        
-            local stack = {  model:get_tree():get_root() }
+            local root = model:get_tree():get_root()
+            
+            local stack = { root }
             while #stack > 0 do
                 local top = table.remove(stack)
                 if top == _pop_sentinel then
                     imgui.TreePop()
                 else
                     imgui.TableNextRow()
-                    local is_leaf = (#top:get_children() == 0) or top:get_is_instance()
+                    
+                    
+                    local is_leaf = true
+                    
+                    for _,child in ipairs(top:get_children()) do
+                        if child:get_owner() == root then
+                            is_leaf = false
+                            break
+                        end
+                    end
+                    
                     local tree_node_flags = {
                         "ImGuiTreeNodeFlags_OpenOnArrow", 
                         "ImGuiTreeNodeFlags_SpanFullWidth",
@@ -89,7 +100,13 @@ function NodeTreeView:draw()
                         end
                     end
                     imgui.TableSetColumnIndex(0)
-                    local open = imgui.TreeNodeEx(top:get_name(), tree_node_flags)
+                    
+                    local dname = top:get_name()
+                    if top.class.icon then
+                        dname = ("%s %s"):format(top.class.icon, dname)
+                    end
+                    
+                    local open = imgui.TreeNodeEx(dname, tree_node_flags)
                                         
                     if imgui.BeginPopupContextItem("NodeContextMenu") then
                         model:set_selected_nodes({top})
@@ -114,10 +131,15 @@ function NodeTreeView:draw()
                         self:emit_signal("node_selected", top)
                     end
                     
-                    if top:get_is_instance() then
+                    if top:get_filepath() then
                         imgui.SameLine()
                         imgui.Text(("%s"):format(IconFont.LINK))
                     end
+                    
+                    --[[if top:get_owner() then
+                        imgui.SameLine()
+                        imgui.Text(top:get_owner():get_name())
+                    end]]--
                     
                     if open then
                         table.insert(stack, _pop_sentinel)
@@ -125,7 +147,7 @@ function NodeTreeView:draw()
                         local children = top:get_children()
                         for i = #children, 1, -1 do
                             local c = children[i]
-                            if not c:get_is_instance() or c:get_filepath() ~= top:get_filepath() then                        
+                            if c:get_owner() == root then     
                                 table.insert(stack, c)
                             end
                         end
@@ -168,7 +190,7 @@ function NodeTreeView:draw()
             imgui.EndTable()
         end
         imgui.EndChild()
-        if imgui.IsWindowFocused({"ImGuiFocusedFlags_RootAndChildWindows"}) then
+        if imgui.IsWindowFocused("ImGuiFocusedFlags_RootAndChildWindows") then
             editor:get_node("Inspector"):set_auto_inspect_nodes(true)
         end
 
