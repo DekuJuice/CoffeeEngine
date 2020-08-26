@@ -68,6 +68,13 @@ function SceneTree:update(dt)
     self.physics_world:physics_update(dt)
 end
 
+function SceneTree:editor_update(dt)
+    for _,node in ipairs(self:_traverse()) do
+        node:event("editor_update", dt)
+    end
+end
+
+
 -- Iterates over root node in preorder
 -- Ex
 --[[

@@ -211,6 +211,7 @@ function Editor:initialize()
                 cmd:add_undo_func(function()
                         par:add_child(sel)
                         par:move_child(sel, c_index)
+                        sel:set_owner(par)
                         scene:set_selected_nodes(selection)
                     end)
 
@@ -282,6 +283,12 @@ function Editor:initialize()
     -- Signals
     self:get_node("ResourceTreeView"):connect("resource_selected", self:get_node("Inspector"), "set_inspected_object" )
     self:get_node("CreateResourceModal"):connect("resource_created", self:get_node("Inspector"), "set_inspected_object")
+end
+
+function Editor:update(dt)
+    local scene = self:get_active_scene()
+    local tree = scene:get_tree()
+    tree:editor_update(dt)
 end
 
 function Editor:get_active_scene()

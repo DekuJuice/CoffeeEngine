@@ -71,8 +71,10 @@ function Node2d:translate(delta)
 end
 
 function Node2d:set_position(pos)
-    self:flag_position_dirty()
     self.position = pos:clone()
+    self.position.x = math.round(self.position.x)
+    self.position.y = math.round(self.position.y)
+    self:flag_position_dirty()
 end
 
 function Node2d:get_position()
@@ -92,6 +94,8 @@ function Node2d:set_global_position(pos)
     local cur = self:get_global_position()
     self:set_position(self.position + (pos - cur))
 end
+
+
 
 -- Returns true if the given point has intersected with the node2d
 -- Used for the editor selecting the node

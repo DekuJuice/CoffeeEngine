@@ -8,7 +8,7 @@ local Texture = require("class.engine.resource.Texture")
 
 Sprite:export_var("texture", "resource", {resource_type=Texture})
 Sprite:export_var("offset", "vec2_int" )
-Sprite:export_var("scale", "vec2_float", {speed = 0.01, min = 0, max=8} )
+Sprite:export_var("scale", "vec2", {speed = 0.01, min = 0, max=8} )
 Sprite:export_var("rotation", "float", {speed = 0.01, min=-math.pi * 2, max=math.pi * 2} )
 Sprite:export_var("flip_h", "bool")
 Sprite:export_var("flip_v", "bool")

@@ -45,6 +45,9 @@ function Console:draw()
             imgui.SetScrollHereY(1);
         end
         
+        local wx, wy = imgui.GetWindowPos()
+        
+        
         imgui.EndChild()
     end
     imgui.End()

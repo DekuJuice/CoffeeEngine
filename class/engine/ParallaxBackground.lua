@@ -1,7 +1,7 @@
 local Sprite = require("class.engine.Sprite")
 
 local ParallaxBackground = Sprite:subclass("ParallaxBackground")
-ParallaxBackground:export_var("scroll_factor", "vec2_float", {min=-2, max=2, speed=0.01} )
+ParallaxBackground:export_var("scroll_factor", "vec2", {min=-2, max=2, speed=0.01} )
 ParallaxBackground:binser_register()
 
 function ParallaxBackground:initialize()

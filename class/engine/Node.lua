@@ -364,11 +364,76 @@ function Node:get_node(path)
     end
 end
 
---[[function Node:get_relative_path(other)
+-- Get path of the node relative to other
+function Node:get_relative_path(other)
     assert(other:get_tree() and self:get_tree(), "Nodes must be in trees to get relative path")
     assert(other:get_tree() == self:get_tree(), "Nodes must be in the same tree to get relative path")
     
-end]]
+    if self == other then
+        return "."
+    end
+    
+    
+    local p1 = self:get_absolute_path() .. "/"
+    local p2 = other:get_absolute_path() .. "/"
+    
+    local i = 1
+    local j = 1
+    
+    while (p1:sub(i, i) == p2:sub(i, i)) do
+        if p1:sub(i, i) == "/" then
+            j = i
+        end
+        i = i + 1
+    end
+    
+    local common = p1:sub(1, j)
+    
+    local root = p1:sub(j, -2)
+    local rel = p2:sub(j + 1, -2):gsub("[^/]+", "..")
+    
+    local path = rel .. root
+    
+    return path
+end
+--[[
+local function test_get_relative_path(p1, p2)
+    local i = 1
+    local j = 1
+    
+    while (p1:sub(i, i) == p2:sub(i, i)) do
+        if p1:sub(i, i) == "/" then
+            j = i
+        end
+        i = i + 1
+    end
+    
+    local common = p1:sub(1, j)
+    
+    local root = p1:sub(j, -2)
+    local rel = p2:sub(j + 1, -2):gsub("[^/]+", "..")
+    
+    local path = rel .. root
+    
+    
+end
+
+test_get_relative_path("/foo/bar/baz/", "/foo/")
+test_get_relative_path("/foo/", "/foo/bar/baz/")
+test_get_relative_path("/foo/bar/baz/", "/foo/qux/")
+
+-- node  /foo/bar/baz
+-- other /foo/
+-- res bar/baz
+
+-- node /foo
+-- other /foo/bar/baz/
+-- res ../..
+
+-- node /foo/bar/baz
+-- other /foo/qux
+-- res ../bar/baz
+]]--
 
 function Node:get_absolute_path()
     assert(self:get_tree(), "Node must be in a tree to get absolute path")

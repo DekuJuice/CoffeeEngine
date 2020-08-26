@@ -33,3 +33,11 @@ function math.round(n, step)
     step = step or 1
     return floor(n / step + 0.5 ) * step
 end
+
+function math.truncate(n)
+    if n > 0 then 
+        return math.floor(n)
+    else
+        return math.ceil(n)
+    end
+end

@@ -21,7 +21,7 @@ function Inspector:parented(parent)
         end)
 end
 
-function Inspector:_draw_edit_widget(ptype, editor_hints, old_val)
+function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
     local filter = editor_hints.filter
     
     local changed = false
@@ -135,7 +135,7 @@ function Inspector:_draw_edit_widget(ptype, editor_hints, old_val)
             for i,aval in ipairs(new_val) do
                 imgui.PushID(("%d"):format(i))
                 local naval, achanged, afinalized, amerge_mode 
-                    = self:_draw_edit_widget( editor_hints.array_type, editor_hints, aval )
+                    = self:_draw_edit_widget(obj, editor_hints.array_type, editor_hints, aval )
                 
                 if achanged then
                     new_val = table.copy(old_val)
@@ -174,7 +174,7 @@ function Inspector:_draw_edit_widget(ptype, editor_hints, old_val)
     elseif ptype == "enum" then
         imgui.PushItemWidth(-1)
         
-        if imgui.BeginCombo("##", old_val) then
+        if imgui.BeginCombo("##enum", old_val) then
             for _,enum in ipairs(editor_hints.enum) do
                 local is_selected = enum == val
                 if imgui.Selectable(enum, is_selected) and not is_selected then
@@ -187,6 +187,26 @@ function Inspector:_draw_edit_widget(ptype, editor_hints, old_val)
             end
             imgui.EndCombo()
         end
+    elseif ptype == "option" then
+        imgui.PushItemWidth(-1)
+        
+        local oget = editor_hints.option_getter
+        if oget then
+            local options = obj[oget](obj)
+            if imgui.BeginCombo("##option", tostring(old_val)) then
+                for _, o in ipairs(options) do
+                    local is_selected = o == val
+                    if imgui.Selectable(o, is_selected) and not is_selected then
+                        new_val = o
+                        changed = true
+                        finalized = true
+                    end
+                    imgui.SetItemDefaultFocus()
+                end
+                imgui.EndCombo()
+            end
+        end
+        
     end 
     
     if finalized then
@@ -221,7 +241,7 @@ function Inspector:_draw_property_widget(obj, ep)
     imgui.Text(display_name)
     imgui.TableSetColumnIndex(1)
 
-    local new_val, changed, finalized, merge_mode = self:_draw_edit_widget(ptype, editor_hints, val)
+    local new_val, changed, finalized, merge_mode = self:_draw_edit_widget(obj, ptype, editor_hints, val)
         
     imgui.PopID()
 
@@ -231,6 +251,7 @@ function Inspector:_draw_property_widget(obj, ep)
     
     if new_val ~= val or finalized then
         if is_node then
+            
             local editor = self:get_parent()
             local scene = editor:get_active_scene()
             local cmd = scene:create_command(("Change value %s"):format(display_name), merge_mode)
