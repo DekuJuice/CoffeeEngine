@@ -82,6 +82,12 @@ end
 
 -- Will replace keys if they have the same time
 function Animation:track_set_key_time(track_index, key_index, new_time)
+    local old = table.remove(self.tracks[track_index].keyframes, key_index)
+    if self.tracks[track_index].type == "var" then
+        self:variable_track_add_key(track_index, new_time, old.value, old.lerp)
+    elseif self.tracks[track_index].type == "func" then
+        self:function_track_add_key(track_index, new_time, old.func_name, old.args)
+    end
 end
 
 function Animation:track_remove_key(track_index, key_index)
@@ -121,7 +127,8 @@ function Animation:function_track_add_key(index, time, func_name, args)
             return
         end
     end
-    
+
+    table.insert(keyframes, 1, new_kf)
 end
 
 function Animation:function_track_set_key_function_name(track_index, key_index, func_name)

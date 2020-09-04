@@ -1,6 +1,11 @@
+-- We say infinite, but for optimization purposes we only allow
+-- chunks coordinates to range from 
+
 local CHUNK_LENGTH = 16
 local CHUNK_TOTAL = CHUNK_LENGTH ^ 2
 local CHUNK_COUNTER = CHUNK_TOTAL + 1
+local SIGMA = 1e5
+local SIGMA_HALF = math.floor(SIGMA / 2)
 
 local Object = require("class.engine.Object")
 local InfiniteGrid = Object:subclass("InfiniteGrid")
@@ -37,7 +42,7 @@ end
 
 -- Return the key for the given chunk position
 function InfiniteGrid:get_chunk_key(x, y)
-    return ("%d_%d"):format(x, y)
+    return (x + SIGMA_HALF) + (y + SIGMA_HALF) * SIGMA
 end
 
 function InfiniteGrid:get_chunk_index(key)
@@ -133,9 +138,14 @@ end
 function InfiniteGrid:get_occupied_cells()
     local cells = {}
     for key, index in pairs(self.chunk_index_map) do
-        local s = key:split("_")
-        local x = tonumber(s[1]) * CHUNK_LENGTH
-        local y = tonumber(s[2]) * CHUNK_LENGTH
+        
+        -- (x + SIGMA_HALF) + (y + SIGMA_HALF) * SIGMA
+
+        local x = key - SIGMA_HALF % SIGMA
+        local y = (key - x - SIGMA_HALF) / SIGMA - SIGMA_HALF
+
+        x = x * CHUNK_LENGTH
+        y = y * CHUNK_LENGTH
         
         local chunk = self:get_chunk(index)
         

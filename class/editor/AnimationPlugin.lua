@@ -42,9 +42,11 @@ function AnimationPlugin:initialize()
 
     self.selected_animation = nil
     self.selected_track = 1
+    self.selected_keyframe = nil
 
     self.timeline_drag = false
     self.keyframe_drag = false
+    self.keyframe_drag_time = 0
     
     self.new_track_modal_open = false
     self.new_track_modal_type = "Variable"
@@ -89,7 +91,41 @@ end
 function AnimationPlugin:update(dt)
     if not love.mouse.isDown(1) then
         self.timeline_drag = false
-        self.keyframe_drag = false
+        if self.keyframe_drag then
+            local animp = self.selected_animation_player
+            local editor = self:get_parent()
+            local model = editor:get_active_scene()
+            
+            if animp then
+                local anim = animp:get_animation(self.selected_animation)
+                local st = self.selected_track
+                local kf = self.selected_keyframe
+                local nt = self.keyframe_drag_time
+                local old_t = anim:track_get_key_time(st, kf)
+                
+                local cmd = model:create_command("Move keyframe")
+                cmd:add_do_func(function()
+                    self.selected_track = st
+                    anim:track_set_key_time(st, kf, nt)
+                    self.selected_keyframe = anim:track_get_key_index(st, nt)
+                end)
+                        
+                local old_i = anim:track_get_key_index(st, nt)
+                if old_i then
+                    
+                else
+                    cmd:add_undo_func(function()
+                        local i = anim:track_get_key_index(st, nt)
+                        anim:track_set_key_time(st, i, old_t)
+                        self.selected_keyframe = anim:track_get_key_index(st, old_t)
+                    end)
+                end
+                        
+                model:commit_command(cmd)
+
+                self.keyframe_drag = false
+            end
+        end
     end
 end
 
@@ -651,22 +687,32 @@ function AnimationPlugin:draw()
                 if step < MINIMUM_STEP then
                     step = math.ceil(MINIMUM_STEP / step) * step
                 end
-
+                
                 -- Timeline control
                 imgui.InvisibleButton("##TimelineInv", tw + step * 2.5, 40) 
+                
+                local mx_time -- playback position at mouse cursor
+                do
+                    local ix = imgui.GetItemRectMin()
+                    local mx = imgui.GetMousePos()
+                    mx_time = (mx - ix) / PIXELS_PER_SECOND / zoom
+                    if self.snap then
+                        local snaptime
+                        if self.time_unit == "Frames" then
+                            snaptime = 1 / self.framerate
+                        else
+                            snaptime = self.second_snap
+                        end
+                        mx_time = math.round(mx_time, snaptime)
+                    end
+                end
 
                 if imgui.IsItemClicked(0) then
                     self.timeline_drag = true
                 end
 
                 if self.timeline_drag then
-                    local ix = imgui.GetItemRectMin()
-                    local mx = imgui.GetMousePos()
-
-                    local new_t = (mx - ix) / PIXELS_PER_SECOND / zoom
-                    new_t = math.min(new_t, anim_length)
-
-                    animp:set_playback_position(new_t, true)
+                    animp:set_playback_position(mx_time, true)
                 end
 
                 local offset = imgui.GetScrollX() % step
@@ -699,10 +745,9 @@ function AnimationPlugin:draw()
                 )
 
                 -- Table rows
-                local track_n = animation:get_track_count()
                 local col_pop = 0
                 local i = 1 
-                while i <= track_n do
+                while i <= animation:get_track_count() do
                     local min_height = imgui.GetFontSize() * 4
                     imgui.TableNextRow(0, min_height)
 
@@ -710,8 +755,8 @@ function AnimationPlugin:draw()
                     -- we need to wait to pop the style colors
 
                     if i == self.selected_track then
-                        imgui.PushStyleColor("ImGuiCol_TableRowBg", 0,159/255,255/255,100/255)
-                        imgui.PushStyleColor("ImGuiCol_TableRowBgAlt", 0,159/255,255/255,100/255)
+                        imgui.PushStyleColor("ImGuiCol_TableRowBg", 0,159/255,255/255,30/255)
+                        imgui.PushStyleColor("ImGuiCol_TableRowBgAlt", 0,159/255,255/255,30/255)
                         col_pop = col_pop + 2
                     else
                         imgui.PushStyleColor("ImGuiCol_TableRowBg", 0)
@@ -743,7 +788,6 @@ function AnimationPlugin:draw()
 
                         model:commit_command(cmd)
 
-                        track_n = track_n - 1
                         i = i - 1
 
                         goto CONTINUE
@@ -814,32 +858,94 @@ function AnimationPlugin:draw()
                         -- invisible item the width of timeline to select track
                         local cx, cy = imgui.GetCursorPos()
                         imgui.InvisibleButton(("##inv%d"):format(i), tw + step*2.5, min_height)
-
+                        imgui.SetItemAllowOverlap()
                         if imgui.IsItemClicked(0) then
                             self.selected_track = i
+                            self.selected_keyframe = nil
                         end
-                        -- Keyframe icons
-                        for j = 1, animation:track_get_key_count(i) do
+                        -- Keyframes
+                        local j = 1
+                        while j <= animation:track_get_key_count(i) do
                             local ktime = animation:track_get_key_time(i, j)
                             local kx = ktime * PIXELS_PER_SECOND * zoom
+                            imgui.SetCursorPos(cx + kx - 14, cy + min_height/2 - 8)                            
+                            imgui.InvisibleButton(("##Keyframe%d_%d"):format(i,j), 20, 16)
+                            local kf_selected = self.selected_track == i and self.selected_keyframe == j
 
-                            local color = 0xC829CC73
-                            if track_type == "var" then
-                                color = 0xC8CC5D29
+                            local circx = wx + cx + kx - imgui.GetScrollX() - 4
+                            local circy = wy + cy + min_height / 2 - imgui.GetScrollY()                            
+                            
+                            if imgui.IsItemClicked(0) then
+                                self.selected_keyframe = j
+                                self.keyframe_drag = true
+                                kf_selected = true
+                            elseif imgui.IsItemClicked("ImGuiMouseButton_Right") then
+                                -- delete keyframe
+                                local cmd = model:create_command("Delete keyframe")
+                                local kf = j
+                                local index = i
+                                
+                                cmd:add_do_func(function()
+                                    animation:track_remove_key(index, kf)
+                                    if self.selected_keyframe == kf then
+                                        self.selected_keyframe = nil    
+                                    end
+                                end)
+                                
+                                local old_t = animation:track_get_key_time(index, kf)
+                                
+                                if track_type == "func" then
+                                    local ofunc = animation:function_track_get_function_name(index, kf)
+                                    local oarg = animation:function_track_get_function_arguments(index, kf)
+                                    
+                                    
+                                    cmd:add_undo_func(function()
+                                        animation:function_track_add_key(index, old_t, ofunc, oarg)                                    
+                                    end)
+                                    
+                                elseif track_type == "var" then
+                                    local old_v = animation:variable_track_get_value(index, kf)
+                                    local old_l = animation:variable_track_get_lerp(index, kf)
+                                    cmd:add_undo_func(function()
+                                        animation:variable_track_add_key(index, old_t, old_v, old_l)
+                                    end)
+                                end
+                                
+                                model:commit_command(cmd)
+                                j = j - 1
+                                goto KEY_CONTINUE
+                                
                             end
 
-                            imgui.AddCircleFilled("window",
-                                wx + cx + kx - imgui.GetScrollX(), wy + cy + min_height / 2 - imgui.GetScrollY(),
-                                4, color)
-
-                            imgui.SetCursorPos(cx + kx + 8, cy + 14)
-                            if track_type == "func" then
-                                local func_name = animation:function_track_get_function_name(i, j)
-                                imgui.Text(("%s(...)"):format(func_name))
-                            elseif track_type == "var" then
-                                local val = animation:variable_track_get_value(i, j)
-                                imgui.Text(tostring(val))
+                            if imgui.IsItemHovered() and not self.keyframe_drag then
+                                imgui.BeginTooltip()
+                                if track_type == "func" then
+                                    local func_name = animation:function_track_get_function_name(i, j)
+                                    imgui.Text(("%s(...)"):format(func_name))
+                                elseif track_type == "var" then
+                                    local val = animation:variable_track_get_value(i, j)
+                                    imgui.Text(tostring(val))
+                                end
+                                imgui.EndTooltip()
                             end
+                            
+
+                           
+                            if kf_selected and self.keyframe_drag then
+                                
+                                self.keyframe_drag_time = math.max(mx_time, 0)   
+                                circx = wx + cx + self.keyframe_drag_time * PIXELS_PER_SECOND * zoom - imgui.GetScrollX() - 4
+                            end
+                            
+                            imgui.AddCircleFilled("window", circx, circy, 7, 0x66FA9642)
+                                
+                            if kf_selected then
+                                imgui.AddCircleFilled("window", circx, circy, 5, 0xFFFA9642)
+                            end
+                            
+                            ::KEY_CONTINUE::
+                            
+                            j = j + 1
                         end
                     end
 

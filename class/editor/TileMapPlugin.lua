@@ -142,15 +142,14 @@ function TileMapPlugin:place_tiles()
                 local i = brush.tiles[(bx - 1) + (by - 1) * brush.width + 1]
                 if i ~= -1 then
                     local t = tilemap:bitmask_tile(i, self.flip_brush_h, self.flip_brush_v)
-
                     self.paint_new_cells:set_cell(x, y, t + 1)
-
+                    
                     local co = self.paint_old_cells:get_cell(x, y)
                     if not co or co == 0 then
                         local old = tilemap:get_cell(x, y) or 0
                         self.paint_old_cells:set_cell(x, y, old + 1)
                     end
-
+                    
                     tilemap:set_cell(x, y, t)
                 end
             end

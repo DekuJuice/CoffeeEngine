@@ -1,3 +1,6 @@
+-- TODO: Rewrite drawing to use a single spritebatch
+-- while still reading from chunks directly
+
 local FLIP_H_BIT = bit.lshift(1, 14)
 local FLIP_V_BIT = bit.lshift(1, 15)
 
@@ -29,16 +32,19 @@ function TileMap:initialize()
     Collidable.initialize(self)
 
     self.tile_data = InfiniteGrid()
-    self.sprite_batches = {}
+    
+    self.sprite_batch = nil
     self.quad_cache = {}
     
     self.collision_enabled = false
     self.tile_size = 16
+    
+    self.changed_chunks = {}
 end
 
 function TileMap:set_tileset(tileset)
     self.tileset = tileset
-    self.sprite_batches = {}
+    self.sprite_batch = nil
     self.quad_cache = {}
     
     if tileset then
@@ -70,7 +76,7 @@ function TileMap:unbitmask_tile(t)
     return t, flip_h, flip_v
 end
 
-function TileMap:set_cell(x, y, t, flip_h, flip_v)
+function TileMap:set_cell(x, y, t)
     self.tile_data:set_cell(x, y, t)
 end
 
@@ -132,38 +138,6 @@ function TileMap:get_chunk_size()
     return self.tile_size * self.tile_data:get_chunk_length()
 end
 
-function TileMap:calculate_visible_chunks()
-    local tree = self:get_tree()
-    local view = tree:get_viewport()
-    
-    local vp = view:get_position()
-    local scale = view:get_scale()
-    local dim = vec2( view:get_resolution() )
-    
-    local gp = self:get_global_position()
-    
-    local rmin = view:transform_to_world( vec2.zero ) - gp
-    local rmax = view:transform_to_world( vec2.zero + dim ) - gp
-
-    local chunk_size = self:get_chunk_size()
-    rmin = rmin / chunk_size
-    rmax = rmax / chunk_size    
-
-    local visible_chunks = {}
-    for x = math.floor(rmin.x), math.floor(rmax.x) do
-        for y = math.floor(rmin.y), math.floor(rmax.y) do
-            
-            local key = self.tile_data:get_chunk_key(x, y)
-            local index = self.tile_data:get_chunk_index(key)
-            if self.tile_data:get_chunk(index) then
-                table.insert(visible_chunks, vec2(x, y))
-            end
-        end
-    end
-    
-    return visible_chunks
-end
-
 function TileMap:draw()
     local tree = self:get_tree()
     if not tree then return end -- Need to be in tree to calculate visible chunks
@@ -172,104 +146,70 @@ function TileMap:draw()
     if not texture then return end -- No texture, nothing to render
     local image = texture:get_love_image()
     
-    
-    local visible_chunks = self:calculate_visible_chunks()
-    
-    local visible_indices = {} -- Set of visible chunk indices
-    for _, cpos in ipairs(visible_chunks) do
-        local key = self.tile_data:get_chunk_key(cpos:unpack())
-        local index = self.tile_data:get_chunk_index(key)
-        visible_indices[index] = true
+    if self.sprite_batch then
+        self.sprite_batch:clear()
+    else
+        self.sprite_batch = love.graphics.newSpriteBatch(image, 500)    
     end
     
-    -- Clean up spritebatches pointing to no longer existing or visible cells
-    for _,binfo in ipairs(self.sprite_batches) do
-        if not visible_indices[binfo.index] then
-            binfo.index = nil
-            binfo.dirty = true
-        end
-    end
-    
-    local gpos = self:get_global_position()
-    local chunk_size = self:get_chunk_size()
+    local view = tree:get_viewport()
+    local vp = view:get_position()
+    local dim = vec2( view:get_resolution() )
+    local gp = self:get_global_position()
+    local rmin = view:transform_to_world( vec2.zero ) - gp
+    local rmax = view:transform_to_world( vec2.zero + dim ) - gp
+
+    local gmin = self:transform_to_map(rmin)
+    local gmax = self:transform_to_map(rmax)
+
     local chunk_length = self.tile_data:get_chunk_length()
+    local chunk_size = self:get_chunk_size()
+    local cmin = rmin / chunk_size
+    local cmax = rmax / chunk_size    
     
-    for _, cpos in ipairs(visible_chunks) do
-        local key = self.tile_data:get_chunk_key(cpos:unpack())
-        local index = self.tile_data:get_chunk_index(key)
-        local chunk = self.tile_data:get_chunk(index)
-        local sprite_batch
-        local info
-            
-        -- Get a free spritebatch
-        for _,binfo in ipairs(self.sprite_batches) do
-            -- Batch no longer used or already cached for this chunk
-            if binfo.index == index or binfo.index == nil then
-                sprite_batch = binfo.batch
-                binfo.index = index
-                info = binfo
-                break
-            end
-        end
-            
-        if not sprite_batch then -- Create new spritebatch since no free ones
-            sprite_batch = love.graphics.newSpriteBatch(
-                image, chunk_length ^ 2, "dynamic")
+    -- Iterate through visible chunks
+    for x = math.floor(cmin.x), math.floor(cmax.x) do
+        for y = math.floor(cmin.y), math.floor(cmax.y) do
+            local key = self.tile_data:get_chunk_key(x, y)
+            local index = self.tile_data:get_chunk_index(key)
+            local chunk = self.tile_data:get_chunk(index)
+            if chunk then
+                local xc = x * chunk_length
+                local yc = y * chunk_length
+                local xc2 = xc + chunk_length - 1
+                local yc2 = yc + chunk_length - 1
                 
-            local binfo = {
-                batch = sprite_batch,
-                index = index,
-                dirty = true
-            }
-                
-            table.insert(self.sprite_batches, binfo )
-            info = binfo
-        end
-            
-        if info.dirty then
-            info.dirty = false
-            sprite_batch:clear()
-            -- Populate batch
-            for y = 1, chunk_length do
-                for x = 1, chunk_length do
-                    local t = chunk[ (x - 1) % chunk_length + (y - 1) * chunk_length + 1]
-                    if t and t > 0 then
-                        
-                        local flip_h, flip_v
-                        t, flip_h, flip_v = self:unbitmask_tile(t)
-                        
-                        local hs = self.tile_size / 2
-                        
-                        sprite_batch:add(
-                            self.quad_cache[t],
-                            (x - 1) * self.tile_size + hs, 
-                            (y - 1) * self.tile_size + hs,
-                            0,
-                            flip_h and -1 or 1,
-                            flip_v and -1 or 1,
-                            hs,
-                            hs
-                        )
+                local x_min = math.max(xc, gmin.x) - xc
+                local y_min = math.max(yc, gmin.y) - yc
+                local x_max = math.min(xc2, gmax.x) - xc
+                local y_max = math.min(yc2, gmax.y) - yc
+                for ty = y_min, y_max do
+                    for tx = x_min, x_max do
+                        local t = chunk[ tx % chunk_length + ty * chunk_length + 1]
+                        if t > 0 then
+                            local flip_h, flip_v
+                            t, flip_h, flip_v = self:unbitmask_tile(t)
+                            
+                            local hs = self.tile_size / 2
+                            self.sprite_batch:add(
+                                self.quad_cache[t],
+                                (tx + xc) * self.tile_size + hs, 
+                                (ty + yc) * self.tile_size + hs,
+                                0,
+                                flip_h and -1 or 1,
+                                flip_v and -1 or 1,
+                                hs,
+                                hs
+                            )
+                        end
                     end
                 end
             end
-            
         end
-        -- Draw batch
-        love.graphics.draw(
-            sprite_batch,
-            cpos.x * chunk_size + gpos.x, 
-            cpos.y * chunk_size + gpos.y
-        )
-            
-        -- Debug rect for chunks
-        --[[love.graphics.rectangle("line", 
-            cpos.x * chunk_size + gpos.x, 
-            cpos.y * chunk_size + gpos.y,
-            chunk_size,
-            chunk_size
-        )]]--
     end
+    
+    love.graphics.draw(self.sprite_batch, gp.x, gp.y)
+
 end
 
 -- World coords to map coords
@@ -290,33 +230,25 @@ end
 function TileMap:draw_collision()
     if not self.collision_enabled then return end
     if not self.tileset then return end
-
-    local visible_chunks = self:calculate_visible_chunks()
-    local gpos = self:get_global_position()
-    local chunk_size = self:get_chunk_size()
-    local chunk_length = self.tile_data:get_chunk_length()
-
-    love.graphics.push("all")
-    love.graphics.setColor(210/255, 165/255, 242/255, 0.3)
-    love.graphics.setLineStyle("rough")
     
-    for _, cpos in ipairs(visible_chunks) do
-        local key = self.tile_data:get_chunk_key(cpos:unpack())
-        local index = self.tile_data:get_chunk_index(key)
-        local chunk = self.tile_data:get_chunk(index)
-        
-        local tmin = cpos * chunk_length
-        local tmax = tmin + vec2(chunk_length - 1, chunk_length - 1)
-        
-        local obs = self:get_obstacles_in_rect(tmin, tmax)
-        for _,o in ipairs(obs) do
-           o:draw_collision() 
-           TileMap:pool_push_obstacle(o)
-        end
-        
+    local tree = self:get_tree()
+    if not tree then return end
+    
+    local view = tree:get_viewport()
+    local vp = view:get_position()
+    local dim = vec2( view:get_resolution() )
+    local gp = self:get_global_position()
+    local rmin = view:transform_to_world( vec2.zero ) - gp
+    local rmax = view:transform_to_world( vec2.zero + dim ) - gp
+    
+    rmin = self:transform_to_map(rmin)
+    rmax = self:transform_to_map(rmax)
+    local obs = self:get_obstacles_in_rect(rmin, rmax)
+    for _,o in ipairs(obs) do
+        o:draw_collision()
+        TileMap:pool_push_obstacle(o)
     end
-    
-    love.graphics.pop()
+
 end
 
 return TileMap
