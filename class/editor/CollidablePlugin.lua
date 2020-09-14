@@ -23,7 +23,7 @@ end
 function CollidablePlugin:update(dt)
     local editor = self:get_parent()
     
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     local selected = model:get_selected_nodes()[1]
     
     if not selected then return end
@@ -68,7 +68,7 @@ end
 function CollidablePlugin:draw()
     local editor = self:get_parent()
     
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     local selected = model:get_selected_nodes()[1]
     
     if not selected then return end
@@ -103,7 +103,7 @@ end
 
 function CollidablePlugin:mousepressed(x, y, button, isTouch)
     local editor = self:get_parent()
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     if button == 1 then
         local selected = model:get_selected_nodes()[1]
     

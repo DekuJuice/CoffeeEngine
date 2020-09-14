@@ -55,7 +55,7 @@ end
 -- the index of any children are hiegher than their parents
 function Node2dPlugin:update_selection()
     local editor = self:get_parent()
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     
     local rmin, rmax = self:get_selection_rect()
     
@@ -74,7 +74,7 @@ end
 
 function Node2dPlugin:drag_nodes() 
     local editor = self:get_parent()
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     local cmd = model:create_command("Move Node2d", "merge_ends")
     
     local delta = self.drag_anchor - self.prev_drag_anchor
@@ -122,7 +122,7 @@ function Node2dPlugin:update(dt)
         end
     elseif self.dragging then
         local editor = self:get_parent()
-        local model = editor:get_active_scene()
+        local model = editor:get_active_scene_model()
         if not love.mouse.isDown(1) then
             local cmd = model:create_command("Move Node2d")
             local global_pos = {}
@@ -168,7 +168,7 @@ function Node2dPlugin:draw()
     end
     
     -- Draw gizmos for node2ds
-    local model = editor:get_active_scene()    
+    local model = editor:get_active_scene_model()    
     
     for _,c in ipairs(traverse_nodes(model:get_tree():get_root())) do
         if c:is_visible_in_tree()
@@ -226,7 +226,7 @@ end
 
 function Node2dPlugin:mousepressed(x, y, button)
     local editor = self:get_parent()
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     
     if button == 1 then
 

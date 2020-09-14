@@ -20,7 +20,7 @@ end
 
 function SaveAsModal:do_save()
     local editor = self:get_parent()
-    local scene = editor:get_active_scene()
+    local scene = editor:get_active_scene_model()
     scene:set_filepath(self.path)
     local packed_scene = scene:pack()
     

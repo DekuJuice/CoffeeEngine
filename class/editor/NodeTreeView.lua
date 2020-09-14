@@ -32,7 +32,7 @@ function NodeTreeView:draw()
         return
     end
 
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     
     local window_flags = {}
     imgui.SetNextWindowSize(800, 600, {"ImGuiCond_FirstUseEver"})
@@ -60,7 +60,7 @@ function NodeTreeView:draw()
             
             imgui.TableSetupColumn("", nil, cw - 30);
             imgui.TableSetupColumn("", nil, 30);
-            local root = model:get_tree():get_root()
+            local root = model:get_tree():get_current_scene()
             
             local stack = { root }
             while #stack > 0 do

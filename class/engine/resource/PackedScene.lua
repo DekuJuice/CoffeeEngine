@@ -35,6 +35,7 @@ function PackedScene:instance()
 end
 
 -- Packs the given root node into scene data
+-- Only nodes owned by the root (+ the root itself) are saved
 function PackedScene:pack(root)
     -- TODO: Save signals/slots
     -- Idea: Keep a list of all resources referenced for preloading purposes?

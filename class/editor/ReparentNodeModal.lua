@@ -12,17 +12,26 @@ function ReparentNodeModal:initialize()
 end
 
 function ReparentNodeModal:open()
-    self.is_open = true
     local editor = self:get_parent()
-    local scene = editor:get_active_scene()
+    local scene = editor:get_active_scene_model()
+    local sel = scene:get_selected_nodes()[1]
+    local cur_scene = scene:get_tree():get_current_scene()
+    
+    -- Can't reparent root
+    if sel == cur_scene then return end
+    
+    -- Can't reparent instanced children
+    if sel:get_owner() ~= cur_scene then return end
+    
     self.target = scene:get_selected_nodes()[1]
+    self.is_open = true
     self.selection = nil
 end
 
 function ReparentNodeModal:confirm_selection()
     local editor = self:get_parent()
-    local scene = editor:get_active_scene()
-    local root = scene:get_tree():get_root()
+    local model = editor:get_active_scene_model()
+    local cur_scene = model:get_tree():get_current_scene()
     
     local old_par = self.target:get_parent()
     local old_i = old_par:get_child_index(self.target)
@@ -30,25 +39,25 @@ function ReparentNodeModal:confirm_selection()
     local new_par = self.selection
     local target = self.target
     
-    local cmd = scene:create_command("Reparent Node")
+    local cmd = model:create_command("Reparent Node")
     cmd:add_do_func(function()
         old_par:remove_child(target)
         new_par:add_child(target)
 
-        target:set_owner(root)
+        target:set_owner(cur_scene)
         target:flag_visibility_dirty()
         
         if target:isInstanceOf(Node2d) then
             target:flag_position_dirty()
-        end
-        
+        end        
     end)
+    
     cmd:add_undo_func(function()
         new_par:remove_child(target)
         old_par:add_child(target)
         old_par:move_child(target, old_i)
         
-        target:set_owner(root)
+        target:set_owner(cur_scene)
         target:flag_visibility_dirty()
         
         if target:isInstanceOf(Node2d) then
@@ -56,7 +65,7 @@ function ReparentNodeModal:confirm_selection()
         end
     end)
     
-    scene:commit_command(cmd)
+    model:commit_command(cmd)
     
     self.is_open = false
 end
@@ -69,7 +78,7 @@ function ReparentNodeModal:draw()
     end
     
     local editor = self:get_parent()
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     
     local window_flags = {}
     imgui.SetNextWindowSize(800, 600, {"ImGuiCond_FirstUseEver"})
@@ -81,7 +90,8 @@ function ReparentNodeModal:draw()
         imgui.BeginChild("##Tree view", 0, -28, {"ImGuiWindowFlags_HorizontalScrollbar"})
         if imgui.BeginTable("##Table", 1, {"ImGuiTableFlags_RowBg"}) then
             
-            local root = model:get_tree():get_root()
+            local root = model:get_tree():get_current_scene()
+            
             local stack = {  root }
             while #stack > 0 do
                 local top = table.remove(stack)

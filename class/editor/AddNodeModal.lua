@@ -16,40 +16,43 @@ end
 
 function AddNodeModal:confirm_selection()
     local editor = self:get_parent()
-    local scene = editor:get_active_scene()
-    local sel = scene:get_selected_nodes()
-    local tree = scene:get_tree()
+    local model = editor:get_active_scene_model()
+    local sel = model:get_selected_nodes()
+    local tree = model:get_tree()
     
     local instance = self.selection()
-    local cmd = scene:create_command("Add Node")
     
-    local root = tree:get_root()
-    if root then
-        local par = root
-        if sel[1] then par = sel[1] end
+    local cmd = model:create_command("Add Node")
+    local cur_scene = tree:get_current_scene()
+
+    if cur_scene then
+        local par = cur_scene
+        if sel[1] then
+            par = sel[1]
+        end
         
         cmd:add_do_func(function()
-            par:add_child(instance)
-            instance:set_owner(root)
-            scene:set_selected_nodes({instance})            
-        end)
+                par:add_child(instance)
+                instance:set_owner(cur_scene)
+                model:set_selected_nodes({instance})
+            end)
         cmd:add_undo_func(function()
-            par:remove_child(instance)
-            scene:set_selected_nodes(sel)
-        end)
-
+                par:remove_child(instance)
+                model:set_selected_nodes(sel)
+            end)
     else
-        cmd:add_do_var(tree, "root", instance)
         cmd:add_do_func(function()
-            scene:set_selected_nodes({instance})
-        end)
-        cmd:add_undo_var(tree, "root", nil)
+                tree:set_current_scene(instance)
+                model:set_selected_nodes({instance})                
+            end)
+            
         cmd:add_undo_func(function()
-            scene:set_selected_nodes({})
-        end)
+                tree:set_current_scene(nil)
+                model:set_selected_nodes(sel)
+            end)
     end
     
-    scene:commit_command(cmd)
+    model:commit_command(cmd)
     
     self.is_open = false
 end
@@ -77,7 +80,14 @@ function AddNodeModal:draw()
                     imgui.TreePop()
                 else
                     imgui.TableNextRow()
-                    local is_leaf = next(top.subclasses, nil) == nil
+                    local is_leaf = true
+                    for subclass in pairs(top.subclasses) do
+                        if not subclass.static.dontlist then
+                            is_leaf = false
+                            break
+                        end
+                    end
+
                     local noinstance = rawget(top.static, "noinstance")
                     local tree_node_flags = {
                         "ImGuiTreeNodeFlags_SpanFullWidth",

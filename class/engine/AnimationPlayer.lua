@@ -3,14 +3,7 @@ local AnimationPlayer = Node:subclass("AnimationPlayer")
 
 AnimationPlayer.static.icon = IconFont and IconFont.FILM
 
-AnimationPlayer:export_var("animations", "data")
-AnimationPlayer:export_var("autoplay", "bool")
-AnimationPlayer:export_var("initial_animation", "option", {option_getter = "get_animation_list"} )
-
-AnimationPlayer:define_get_set("playback_position")
-AnimationPlayer:define_get_set("current_animation")
-
-AnimationPlayer:binser_register()
+AnimationPlayer:define_signal("animation_finished")
 
 function AnimationPlayer:initialize()
     Node.initialize(self)
@@ -243,6 +236,12 @@ function AnimationPlayer:get_animation_list()
     return list
 end
 
+AnimationPlayer:define_get_set("playback_position")
+AnimationPlayer:define_get_set("current_animation")
 
+AnimationPlayer:export_var("animations", "data")
+AnimationPlayer:export_var("autoplay", "bool")
+AnimationPlayer:export_var("initial_animation", "enum", {enum = AnimationPlayer.get_animation_list, include_nil = true})
+AnimationPlayer:binser_register()
 
 return AnimationPlayer

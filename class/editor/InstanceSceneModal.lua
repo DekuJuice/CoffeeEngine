@@ -8,9 +8,9 @@ end
 
 function InstanceSceneModal:confirm_selection()
     local editor = self:get_parent()
-    local scene = editor:get_active_scene()
-    local sel = scene:get_selected_nodes()
-    local tree = scene:get_tree()
+    local model = editor:get_active_scene_model()
+    local sel = model:get_selected_nodes()
+    local tree = model:get_tree()
     
     local ps = resource.get_resource(self.selection)
     local ok, res = pcall(ps.instance, ps)
@@ -21,35 +21,41 @@ function InstanceSceneModal:confirm_selection()
         return
     end
     
-    local cmd = scene:create_command("Instance Node")
-    
     local root = tree:get_root()
-    if root then
-        local par = root
+    
+    
+    
+    local cmd = model:create_command("Instance Node")
+    local cur_scene = tree:get_current_scene()
+    
+    if cur_scene then
+        local par = cur_scene
         if sel[1] then par = sel[1] end
         
         cmd:add_do_func(function()
-            par:add_child(res)
-            res:set_owner(root)
-            scene:set_selected_nodes({res})            
-        end)
+                par:add_child(res)
+                res:set_owner(cur_scene)
+                model:set_selected_nodes({res})            
+            end)
         cmd:add_undo_func(function()
-            par:remove_child(res)
-            scene:set_selected_nodes(sel)
-        end)
-
+                par:remove_child(res)
+                model:set_selected_nodes(sel)
+            end)
+        
     else
-        cmd:add_do_var(tree, "root", res)
+        
         cmd:add_do_func(function()
-            scene:set_selected_nodes({res})
-        end)
-        cmd:add_undo_var(tree, "root", nil)
+                tree:set_current_scene(res)
+                model:set_selected_nodes({res})
+            end)
+            
         cmd:add_undo_func(function()
-            scene:set_selected_nodes({})
-        end)
+                tree:set_current_scene(nil)
+                model:set_selected_nodes(sel)
+            end)
     end
-    
-    scene:commit_command(cmd)
+
+    model:commit_command(cmd)
 
     self.is_open = false
 end

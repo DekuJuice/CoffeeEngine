@@ -56,7 +56,7 @@ function AnimationPlugin:initialize()
 end
 
 function AnimationPlugin:enter_tree()
-    local scene = self:get_parent():get_active_scene()
+    local scene = self:get_parent():get_active_scene_model()
 
     local test_anim = Animation()
     test_anim:add_function_track("..")
@@ -72,10 +72,10 @@ function AnimationPlugin:enter_tree()
     ap:add_animation(test_anim)
 
     local n2 = require("class.engine.Node2d")()
-
-    scene:get_tree():set_root(n2)
+    scene:get_tree():set_current_scene(n2)
+    
     n2:add_child(ap)
-    ap:set_owner(n2)
+    ap:set_owner( n2 )
 
     scene:set_selected_nodes({ap})
 
@@ -94,7 +94,7 @@ function AnimationPlugin:update(dt)
         if self.keyframe_drag then
             local animp = self.selected_animation_player
             local editor = self:get_parent()
-            local model = editor:get_active_scene()
+            local model = editor:get_active_scene_model()
             
             if animp then
                 local anim = animp:get_animation(self.selected_animation)
@@ -144,7 +144,7 @@ function AnimationPlugin:_draw_new_track_modal()
     imgui.OpenPopup("New Track")
 
     local editor = self:get_parent()
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     
     local animp = self.selected_animation_player
     if not animp then return end
@@ -340,7 +340,7 @@ end
 function AnimationPlugin:draw()
 
     local editor = self:get_parent()
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     
     if self.selected_animation_player then
         if self.selected_animation_player:get_tree() ~= model:get_tree() then

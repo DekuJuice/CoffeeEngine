@@ -45,7 +45,7 @@ local WALL_JUMP_SENSOR_RIGHT = vec2(AABB_EXTENTS.x + 4, 0)
 
 local input = require("input")
 local class = require("enginelib.middleclass")
-local StateMachine = require("class.engine.StateMachine")
+
 local Obstacle = require("class.engine.Obstacle")
 local Actor = require("class.engine.Actor")
 local Player = Actor:subclass("Player")
@@ -143,7 +143,6 @@ function Player:ready()
         hitbox:connect("area_entered", self, "on_area_enter")
         hitbox:connect("area_exited", self, "on_area_exit")
     end
-    
 end
 
 function Player:on_area_enter(area)
@@ -193,13 +192,15 @@ function Player:physics_update(dt)
         hitbox:set_aabb_extents(self:get_aabb_extents())
         hitbox:set_aabb_offset(self:get_aabb_offset())
     end
-    
-    
 end
 
 function Player:draw()
     local gp = self:get_global_position()
     love.graphics.print(self.movement_state.class.name, gp:unpack())
+end
+
+function Player:on_crush(obs)
+    log.info("Player was crushed")
 end
 
 function StandingState:initialize(player)

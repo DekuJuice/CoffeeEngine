@@ -5,6 +5,8 @@ local Actor = Collidable:subclass("Actor")
 Actor.static.noinstance = true
 Actor.static.icon = IconFont and IconFont.USER
 
+Actor:define_signal("actor_crushed")
+
 Actor:export_var("aabb_extents", "vec2_int", {speed = 0.2, min = 0, max = math.huge} )
 Actor:export_var("aabb_offset", "vec2_int", {speed = 0.2, min = -math.huge, max = math.huge})
 Actor:export_var("cling_dist", "int", {speed = 0.05, min = 0, max = 16})
@@ -110,10 +112,6 @@ function Actor:draw_collision()
     love.graphics.setColor(160/255, 201/255, 115/255, 0.3)
     love.graphics.rectangle("fill", rectmin.x, rectmin.y, dim.x, dim.y)
     love.graphics.pop()
-end
-
-function Actor:crushed() 
-    log.info(tostring(self) .. " was crushed")
 end
 
 return Actor

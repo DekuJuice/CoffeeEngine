@@ -9,22 +9,30 @@ function ScenePlayer:initialize()
     Node.initialize(self)
     
     self.open = false
-
+    self.player_tree = nil
 end
 
 function ScenePlayer:parented(parent)
     parent:add_action("Play Scene", function()
-        local scene = parent:get_active_scene()
+        local scene = parent:get_active_scene_model()
         self:play(scene)    
     end, "f5")
 end
 
+function ScenePlayer:_cleanup()
+    self.open = false
+    self.player_tree = nil
+    -- an error may have occured, and nodes can't be safely notified,
+    -- need to make sure playing audio sources are stopped
+    love.audio.stop()
+end
+
 function ScenePlayer:play(scene)
 
-    if not scene:get_tree():get_root() then return end
+    if not scene:get_tree():get_current_scene() then return end
     
     local packed = scene:pack()
-    local root = packed:instance()
+    local instance = packed:instance()
     
     self.open = true
     
@@ -33,9 +41,35 @@ function ScenePlayer:play(scene)
     self.player_tree:get_viewport():set_background_color({0,0,0,1})
     self.player_tree:get_viewport():set_resolution(settings.get_setting("game_width"), settings.get_setting("game_height"))
     self.player_tree:set_debug_draw_physics( scene:get_tree():get_debug_draw_physics() )
-    self.player_tree:set_root(root)
     
-    -- TODO: Create autoload nodes
+    -- Create autoloads
+    for _, path in ipairs(settings.get_setting("autoload_scenes")) do
+        local as = resource.get_resource( path )
+        if not as then
+            log.error(("Failed to get autoload %s"):format(path))
+            
+            
+            self:_cleanup()
+            return
+        end
+        
+        local ok, res = pcall(as.instance, as)
+        if not ok then
+            log.error(res)
+            self:_cleanup()
+            return
+        end
+        
+        self.player_tree:get_root():add_child( res )        
+    end
+    
+    
+    local ok, msg  = pcall(self.player_tree.set_current_scene, self.player_tree, instance)
+    if not ok then
+        log.error(msg)
+        self:_cleanup()
+    end
+    
 end
 
 function ScenePlayer:update(dt)
@@ -43,7 +77,7 @@ function ScenePlayer:update(dt)
         local ok,err = pcall(self.player_tree.update, self.player_tree, dt)
         if not ok then
             log.error(err)
-            self.open = false
+            self:_cleanup()
         end
     end
 end
@@ -77,9 +111,8 @@ function ScenePlayer:draw()
         local ok, err = pcall( self.player_tree.render, self.player_tree)
         if not ok then
             log.error(err)
-            self.open = false
             imgui.EndPopup()
-            self.player_tree = nil
+            self:_cleanup()
             return
         end
         
@@ -93,7 +126,7 @@ function ScenePlayer:draw()
 
     self.open = window_open
     if not self.open then   
-        self.player_tree = nil
+        self:_cleanup()
     end
 
 end

@@ -174,6 +174,15 @@ function Node:_set_tree(tree)
         
 end
 
+function Node:_validate_owner()
+    local owner = self:get_owner()
+    if not owner then return end
+    
+    if not owner:is_parent_of(self) then
+        self.owner = nil
+    end        
+end
+
 function Node:flag_visibility_dirty()
     self.visible_dirty = true
     local stack = {}
@@ -257,7 +266,7 @@ function Node:remove_child(child)
             child:flag_visibility_dirty()
             child:event("unparented", self)
             child:_set_tree(nil)
-            child:propagate_event_preorder("set_owner", false, nil)
+            child:propagate_event_preorder("_validate_owner", false)
             
             return true
         end
@@ -472,6 +481,7 @@ end
 function Node:remove_tag(tag)
     self.tags[tag] = nil
 end
+
 
 function Node:propagate_event_preorder(name, allow_interrupt, ...)
     if self:event(name, ...) and allow_interrupt then

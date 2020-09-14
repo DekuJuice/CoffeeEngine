@@ -12,12 +12,10 @@ Animation:binser_register()
 
 function Animation:initialize()
     Object.initialize(self)
-    
     self.name = "Unnamed"
     self.loop = false
     self.length = 1.0
     self.tracks = {}
-    
 end
 
 function Animation:set_length(length)

@@ -598,7 +598,7 @@ function PhysicsWorld:_step_obstacle_x(obstacle, sign)
             end
 
             if blocked and not obstacle:has_tag("no_crush") then
-                actor:crushed()
+                actor:emit_signal("actor_crushed", obstacle)
             end
 
         end

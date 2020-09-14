@@ -1,4 +1,3 @@
-local binser = require("enginelib.binser")
 
 local ImportedResource = require("class.engine.resource.ImportedResource")
 local Texture = ImportedResource:subclass("Texture")

@@ -14,28 +14,38 @@ SceneTree:define_get_set("is_editor")
 function SceneTree:initialize()
     Object.initialize(self)
     -- Scenetree can only have 1 root node
-    self.root = nil
+    self.root = Node()
+    self.root:set_name("root")
+    self.current_scene = nil
+    
     self.viewport = Viewport(800, 600)
     self.scale_mode = "aspect"
     self.physics_world = PhysicsWorld()
     self.debug_draw_physics = false
     self.is_editor = false
+
+    self.root:_set_tree(self)
 end
 
 function SceneTree:get_physics_world()
     return self.physics_world
 end
 
-function SceneTree:set_root(root)
-    -- Remove reference to self from existing root and children
-    if self.root then
-        self.root:_set_tree(nil)
+function SceneTree:set_current_scene(scene)
+    if self.current_scene then
+        self.root:remove_child(self.current_scene)
     end
-    self.root = root
-    -- Give reference to self to children
-    if self.root then
-        self.root:_set_tree(self)
-    end
+    
+    self.current_scene = scene
+    
+    if self.current_scene then
+        self.root:add_child(self.current_scene)
+        self.current_scene:set_owner(self.root)
+    end    
+end
+
+function SceneTree:get_current_scene()
+    return self.current_scene
 end
 
 function SceneTree:get_root()

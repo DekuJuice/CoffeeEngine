@@ -308,7 +308,8 @@ function love.load(args, unfiltered_args)
         main:get_viewport():set_resolution( love.graphics.getDimensions() )
         main:get_viewport():set_background_color({0.2, 0.2, 0.25, 1})
         main:set_scale_mode("free")
-        main:set_root( require("class.editor.Editor")())
+        local editor = require("class.editor.Editor")()
+        main:get_root():add_child(editor)        
 
     else -- Otherwise, it's the main game scene
         main:set_scale_mode( settings.get_setting("upscale_mode") )
@@ -316,10 +317,17 @@ function love.load(args, unfiltered_args)
             settings.get_setting("game_width"),
             settings.get_setting("game_height")
         )
+        
+        -- Create autoloads
+        for _, path in ipairs(settings.get_setting("autoload_scenes")) do
+            local as = resource.get_resource( path )
+            assert(as, ("Failed to get autoload %s"):format(path))
+            main:get_root():add_child( as:instance() )
+        end
 
         local mscene = resource.get_resource( settings.get_setting("main_scene") )
         assert(mscene ~= nil, "No main scene!")
-        main:set_root(mscene:instance())
+        main:set_current_scene(mscene:instance())
     end
 
     -- Load input bindings

@@ -51,7 +51,7 @@ end
 
 function TileMapPlugin:update()
     local editor = self:get_parent()
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     local tilemap = model:get_selected_nodes()[1]
     if not tilemap or not tilemap:isInstanceOf(TileMap) then return end
 
@@ -112,7 +112,7 @@ end
 
 function TileMapPlugin:place_tiles()
     local editor = self:get_parent()
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     local tilemap = model:get_selected_nodes()[1]
     if not tilemap or not tilemap:isInstanceOf(TileMap) then return end
 
@@ -159,7 +159,7 @@ end
 
 function TileMapPlugin:draw_toolbar()
     local editor = self:get_parent()
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     local tilemap = model:get_selected_nodes()[1]
     if not tilemap or not tilemap:isInstanceOf(TileMap) then return end
 
@@ -205,7 +205,7 @@ end
 function TileMapPlugin:draw_tile_selector()
 
     local editor = self:get_parent()
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     local tilemap = model:get_selected_nodes()[1]
     if not tilemap or not tilemap:isInstanceOf(TileMap) then return end
 
@@ -481,7 +481,7 @@ function TileMapPlugin:draw()
     self:draw_tileset_editor()
 
     local editor = self:get_parent()
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     local tilemap = model:get_selected_nodes()[1]
     if not tilemap or not tilemap:isInstanceOf(TileMap) then return end
 
@@ -552,7 +552,7 @@ end
 
 function TileMapPlugin:keypressed(key, scan, isRepeat)
     local editor = self:get_parent()
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     local tilemap = model:get_selected_nodes()[1]
     if not tilemap or not tilemap:isInstanceOf(TileMap) then return end
 
@@ -577,7 +577,7 @@ end
 
 function TileMapPlugin:mousemoved(x, y, dx, dy)
     local editor = self:get_parent()
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     local tilemap = model:get_selected_nodes()[1]
     if not tilemap or not tilemap:isInstanceOf(TileMap) then return end
 
@@ -593,7 +593,7 @@ end
 
 function TileMapPlugin:mousepressed(x, y, button)
     local editor = self:get_parent()
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     local tilemap = model:get_selected_nodes()[1]
     if tilemap and tilemap:isInstanceOf(TileMap) then
 

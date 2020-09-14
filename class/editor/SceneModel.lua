@@ -156,10 +156,12 @@ function SceneModel:initialize(loadpath)
     self.tree:set_is_editor(true)
     
     if loadpath then
-        local root = self.packed_scene:instance()
-        root:set_filepath(nil)
-        
-        self.tree:set_root(root)
+        local scene = self.packed_scene:instance()
+
+        -- Clear filepath, as we're loading the scene directly for editing,
+        -- not instancing it
+        scene:set_filepath(nil)        
+        self.tree:get_root():set_current_scene(scene)
         
     end
 end
@@ -182,7 +184,9 @@ function SceneModel:get_filepath(path)
 end
 
 function SceneModel:pack()
-    self.packed_scene:pack(self:get_tree():get_root())
+    local cur_scene = self:get_tree():get_current_scene()
+    assert(cur_scene, "Model needs a root node to be packed")
+    self.packed_scene:pack(cur_scene)
     return self.packed_scene
 end
 

@@ -21,6 +21,18 @@ function Inspector:parented(parent)
         end)
 end
 
+local function get_hint_value(obj, name, hints, default)
+    local h = hints[name]
+    
+    if h == nil then return default end
+    
+    if type(h) == "function" then
+        return h(obj)
+    end
+    
+    return h    
+end
+
 function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
     local filter = editor_hints.filter
     
@@ -31,38 +43,39 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
     
     if ptype == "string" then
         imgui.PushItemWidth(-1)
-        local max_len = editor_hints.max_len or 64
+        local max_len = get_hint_value(obj, "max_len", editor_hints, 64)
+        
         changed, new_val = imgui.InputText("##StringInput", old_val, max_len)
         finalized = imgui.IsItemDeactivatedAfterEdit()
         merge_mode = "merge_ends"
+        
     elseif ptype == "float" then
+    
         local velo, smin, smax = 
-        editor_hints.speed, editor_hints.min, editor_hints.max
-        velo = velo or 0.01
-        smin = smin or -math.huge
-        smax = smax or math.huge
+            get_hint_value(obj, "speed", editor_hints, 0.01),
+            get_hint_value(obj, "min", editor_hints, -math.huge),
+            get_hint_value(obj, "max", editor_hints, math.huge)        
+        
         imgui.PushItemWidth(-1)
         changed, new_val = imgui.DragFloat("##FloatSlider", old_val, velo, smin, smax)
         finalized = imgui.IsItemDeactivatedAfterEdit()
         merge_mode = "merge_ends"
     elseif ptype == "int" then
         local velo, smin, smax =
-        editor_hints.speed, editor_hints.min, editor_hints.max
-
-        velo = velo or 0.1
-        smin = smin or -math.huge
-        smax = smax or math.huge
+            get_hint_value(obj, "speed", editor_hints, 0.01),
+            get_hint_value(obj, "min", editor_hints, -math.huge),
+            get_hint_value(obj, "max", editor_hints, math.huge)     
+        
         imgui.PushItemWidth(-1)
         changed, new_val = imgui.DragInt("##IntSlider", old_val, velo, smin, smax)
         finalized = imgui.IsItemDeactivatedAfterEdit()
         merge_mode = "merge_ends"
     elseif ptype:find("vec2") == 1 then
         local velo, smin, smax = 
-        editor_hints.speed, editor_hints.min, editor_hints.max
-
-        velo = velo or 1
-        smin = smin or 0
-        smax = smax or 100
+            get_hint_value(obj, "speed", editor_hints, 0.01),
+            get_hint_value(obj, "min", editor_hints, -math.huge),
+            get_hint_value(obj, "max", editor_hints, math.huge)  
+        
         imgui.PushItemWidth(-1)
         
         local c, nx, ny
@@ -103,8 +116,9 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
             end
         end
     elseif ptype == "array" then
-        assert(editor_hints.array_type ~= nil, "A type for the array contents must be specified")
-        assert(editor_hints.init_value ~= nil, "An init value must be specified")
+        assert(editor_hints.array_type ~= nil, ("A type for the array contents must be specified (%s, %s)"):format(tostring(obj), ptype))
+        assert(editor_hints.init_value ~= nil, ("An init value must be specified (%s, %s)"):format(tostring(obj), ptype))
+        
         if imgui.CollapsingHeader("Array") then
             local cx = imgui.GetCursorPosX()
             
@@ -151,6 +165,8 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
         end
 
     elseif ptype == "resource" then
+        assert(editor_hints.resource_type ~= nil, ("A resource type must be specified (%s, %s)"):format(tostring(obj), ptype))
+        
         if imgui.Button("Select") then
             self.select_resource_modal:open(  editor_hints.resource_type.static.extensions )
         end
@@ -174,10 +190,22 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
     elseif ptype == "enum" then
         imgui.PushItemWidth(-1)
         
-        if imgui.BeginCombo("##enum", old_val) then
-            for _,enum in ipairs(editor_hints.enum) do
+        local enums = get_hint_value(obj, "enum", editor_hints, {})
+        
+        
+        
+        if imgui.BeginCombo("##enum", tostring(old_val)) then
+            if get_hint_value(obj, "include_nil", editor_hints, false) then
+                if imgui.Selectable("nil", old_val == nil) and old_val ~= nil then
+                    new_val = nil
+                    changed = true
+                    finalized = true
+                end
+            end
+            
+            for _,enum in ipairs(enums) do
                 local is_selected = enum == val
-                if imgui.Selectable(enum, is_selected) and not is_selected then
+                if imgui.Selectable(tostring(enum), is_selected) and not is_selected then
                     new_val = enum
                     changed = true
                     finalized = true
@@ -187,26 +215,6 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
             end
             imgui.EndCombo()
         end
-    elseif ptype == "option" then
-        imgui.PushItemWidth(-1)
-        
-        local oget = editor_hints.option_getter
-        if oget then
-            local options = obj[oget](obj)
-            if imgui.BeginCombo("##option", tostring(old_val)) then
-                for _, o in ipairs(options) do
-                    local is_selected = o == val
-                    if imgui.Selectable(o, is_selected) and not is_selected then
-                        new_val = o
-                        changed = true
-                        finalized = true
-                    end
-                    imgui.SetItemDefaultFocus()
-                end
-                imgui.EndCombo()
-            end
-        end
-        
     end 
     
     if finalized then
@@ -240,7 +248,7 @@ function Inspector:_draw_property_widget(obj, ep)
     imgui.AlignTextToFramePadding()
     imgui.Text(display_name)
     imgui.TableSetColumnIndex(1)
-
+    
     local new_val, changed, finalized, merge_mode = self:_draw_edit_widget(obj, ptype, editor_hints, val)
         
     imgui.PopID()
@@ -253,11 +261,11 @@ function Inspector:_draw_property_widget(obj, ep)
         if is_node then
             
             local editor = self:get_parent()
-            local scene = editor:get_active_scene()
-            local cmd = scene:create_command(("Change value %s"):format(display_name), merge_mode)
+            local model = editor:get_active_scene_model()
+            local cmd = model:create_command(("Change value %s"):format(display_name), merge_mode)
             cmd:add_do_var(obj, name, new_val)
             cmd:add_undo_var(obj, name, val)
-            scene:commit_command(cmd)
+            model:commit_command(cmd)
         else
             obj[setter](obj, new_val)
             obj:set_has_unsaved_changes(true)
@@ -269,7 +277,7 @@ end
 function Inspector:_draw_node_inspector()
     local node = self.inspected_object
     local editor = self:get_parent()
-    local scene = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
 
     imgui.Text( ("%s: %s"):format(node.class.name, node:get_name()))
     imgui.Text( ("Path: %s"):format(node:get_absolute_path()))
@@ -280,7 +288,7 @@ function Inspector:_draw_node_inspector()
         local finalized = imgui.IsItemDeactivatedAfterEdit()
 
         if finalized and nv ~= "" and not node:has_tag(nv) then
-            local cmd = scene:create_command("Add Tag")
+            local cmd = model:create_command("Add Tag")
             cmd:add_do_func(function()
                 node:add_tag(nv)
             end)
@@ -288,7 +296,7 @@ function Inspector:_draw_node_inspector()
             cmd:add_undo_func(function()
                 node:remove_tag(nv)
             end)
-            scene:commit_command(cmd)
+            model:commit_command(cmd)
         end
 
         local tags = {}
@@ -301,18 +309,37 @@ function Inspector:_draw_node_inspector()
             imgui.Text(t)
             imgui.SameLine()
             if imgui.Button(IconFont.MINUS) then
-                local cmd = scene:create_command("Remove Tag")
+                local cmd = model:create_command("Remove Tag")
                 cmd:add_do_func(function()
                     node:remove_tag(t)
                 end)
                 cmd:add_undo_func(function()
                     node:add_tag(t)
                 end)
-                scene:commit_command(cmd)
+                model:commit_command(cmd)
             end
         end                  
     end
     imgui.Separator()
+    
+    -- Signal editor
+    if imgui.CollapsingHeader("Signals") then
+        local class = node.class
+        local signals = {}
+        for name in pairs(class:get_signals()) do
+            table.insert(signals, name)
+        end
+        table.sort(signals)
+        
+        for _, name in ipairs(signals) do
+            imgui.Text(name)
+        end
+        
+        
+    end
+    
+    imgui.Separator()
+    
 end
 
 function Inspector:_draw_resource_inspector()
@@ -355,7 +382,7 @@ function Inspector:draw()
         return
     end
 
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
 
     local window_flags = {}
     imgui.SetNextWindowSize(800, 600, {"ImGuiCond_FirstUseEver"})
@@ -366,7 +393,7 @@ function Inspector:draw()
 
     if should_draw then
         if self.auto_inspect_nodes then
-            self.inspected_object = editor:get_active_scene():get_selected_nodes()[1]
+            self.inspected_object = editor:get_active_scene_model():get_selected_nodes()[1]
         end
 
         if self.inspected_object then

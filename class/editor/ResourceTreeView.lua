@@ -33,7 +33,7 @@ function ResourceTreeView:draw()
         return
     end
 
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     
     local window_flags = {}
     imgui.SetNextWindowSize(800, 600, {"ImGuiCond_FirstUseEver"})

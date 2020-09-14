@@ -96,7 +96,7 @@ define_setting("game_width", 416, {is_int, is_real, curry(is_greater, 0)})
 define_setting("game_height", 240, {is_int, is_real, curry(is_greater, 0)})
 define_setting("main_scene", "scene/levels/debugroom.scene", {is_string})
 
-define_setting("autoload_nodes", {}, {is_table, curry(check_table, is_string)})
+define_setting("autoload_scenes", {}, {is_table, curry(check_table, is_string)})
 
 define_setting("collision_layer_0_name", "", {read_only})
 define_setting("collision_layer_1_name", "", {read_only})

@@ -61,31 +61,34 @@ function Editor:initialize()
 
     -- Add actions
     self.action_dispatcher:add_action("Save", function() 
-            local model = self:get_active_scene()
-            if not model:get_tree():get_root() then
+            local model = self:get_active_scene_model()
+            local scene = model:get_tree():get_current_scene()
+            
+            if not scene then
                 self:get_node("AlertModal"):show("Alert!", "The scene must have a root node to be saved.", {"Ok"})
                 return
             end
+            
             local path = model:get_filepath()
             if not path then
                 self.action_dispatcher:do_action("Save As")
                 return 
             end
-
+            
             resource.save_resource(model:pack())
-
+            
         end, "ctrl+s")
 
     self.action_dispatcher:add_action("Save As", function()
-            local model = self:get_active_scene()
-            if not model:get_tree():get_root() then
+            local model = self:get_active_scene_model()
+            local scene = model:get_tree():get_current_scene()
+            
+            if not scene then
                 self:get_node("AlertModal"):show("Alert!", "The scene must have a root node to be saved.", {"Ok"})
                 return
             end
-
-            self:get_node("SaveAsModal"):open( 
-                self:get_active_scene():get_filepath()
-            )
+            
+            self:get_node("SaveAsModal"):open( model:get_filepath() )
         end, "ctrl+shift+s")
 
     self.action_dispatcher:add_action("New Scene", function()
@@ -101,11 +104,11 @@ function Editor:initialize()
         end, "ctrl+w")
 
     self.action_dispatcher:add_action("Undo", function()
-            self:get_active_scene():undo()
+            self:get_active_scene_model():undo()
         end, "ctrl+z")
 
     self.action_dispatcher:add_action("Redo", function()
-            self:get_active_scene():redo()
+            self:get_active_scene_model():redo()
         end, "ctrl+y")
 
     self.action_dispatcher:add_action("Instance Scene", function()
@@ -117,117 +120,152 @@ function Editor:initialize()
         end, "ctrl+a")
 
     self.action_dispatcher:add_action("Move Node Up", function()
-            local scene = self:get_active_scene()
-            local root = scene:get_tree():get_root()
-            local sel = scene:get_selected_nodes()[1]
-            local par = sel:get_parent()
-            if sel and par then
-                local old_i = par:get_child_index(sel)
-                if old_i > 1 then
-                    
-                    local above = par:get_child(old_i - 1)
-                    if above:get_owner() == root then
-                    
-                        local cmd = scene:create_command("Move child up")
-                        cmd:add_do_func(function()
-                                par:move_child(sel, old_i - 1)
-                            end)
+            local model = self:get_active_scene_model()
+            local sel = model:get_selected_nodes()[1]
+            
+            if not sel then return end
+            local cur_scene = model:get_tree():get_current_scene()
+            
+            -- Selection is current scene, cannot be above autoloads
+            if sel == cur_scene then return end
+            
+            local par = sel:get_parent()            
+            local old_i = par:get_child_index(sel)
+            if old_i == 1 then return end
+            
+            local above = par:get_child(old_i - 1)
+            -- Above nodes are part of instanced node, don't 
+            -- allow reordering
+            if above:get_owner() ~= cur_scene then return end
+            
+            local cmd = model:create_command("Move child up")
+            cmd:add_do_func(function()
+                    par:move_child(sel, old_i - 1)
+                end)
                         
-                        cmd:add_undo_func(function()
-                                par:move_child(sel, old_i)
-                            end)
+            cmd:add_undo_func(function()
+                    par:move_child(sel, old_i)
+                end)
                             
-                        scene:commit_command(cmd)
-                    end
-                end
-            end
+            model:commit_command(cmd)
+
         end,"ctrl+up")
 
     self.action_dispatcher:add_action("Move Node Down", function()
-            local scene = self:get_active_scene()
-            local sel = scene:get_selected_nodes()[1]
+            local model = self:get_active_scene_model()
+            local sel = model:get_selected_nodes()[1]
+            
+            if not sel then return end
+            local cur_scene = model:get_tree():get_current_scene()            
+            -- Root is current scene, cannot be above autoloads
+            if sel == cur_scene then return end
             local par = sel:get_parent()
-            if sel and par then
-                local old_i = par:get_child_index(sel)
-                if old_i < par:get_child_count() then
-
-                    local cmd = scene:create_command("Move child down")
-                    cmd:add_do_func(function()
-                            par:move_child(sel, old_i + 1)
-                        end)
-
-                    cmd:add_undo_func(function()
-                            par:move_child(sel, old_i)
-                        end)
-
-                    scene:commit_command(cmd)
-
-                end
-            end
+            
+            local old_i = par:get_child_index(sel)
+            if old_i == par:get_child_count() then return end
+            
+            -- Don't need to do check for children of instanced nodes since
+            -- node being moved will always be below them
+            
+            local cmd = model:create_command("Move child down")
+            cmd:add_do_func(function()
+                    par:move_child(sel, old_i + 1)
+                end)
+                        
+            cmd:add_undo_func(function()
+                    par:move_child(sel, old_i)
+                end)
+                            
+            model:commit_command(cmd)
         end,"ctrl+down")
 
     self.action_dispatcher:add_action("Reparent Node", function()
             self:get_node("ReparentNodeModal"):open()
-            -- Open reparent modal
         end)
 
     self.action_dispatcher:add_action("Duplicate Node", function()
-            local scene = self:get_active_scene()
-            local sel = scene:get_selected_nodes()[1]
-            local par = sel:get_parent()
-            if sel and par then
-                local dupe = sel:duplicate()
-                local cmd = scene:create_command("Duplicate Node")
-                cmd:add_do_func(function() 
-                        par:add_child(dupe)
-                    end)
-                cmd:add_undo_func(function() 
-                        par:remove_child(dupe)
-                    end)
-
-                scene:commit_command(cmd)
-
-            end
+            local model = self:get_active_scene_model()
+            local sel = model:get_selected_nodes()
+            
+            if not sel[1] then return end
+                        
+            local cur_scene = model:get_tree():get_current_scene()
+            -- Can't duplicate root of scene
+            if sel[1] == cur_scene then return end
+                        
+            local par = sel[1]:get_parent()            
+            local dupe = sel[1]:duplicate()
+            
+            local cmd = model:create_command("Duplicate Node")
+            cmd:add_do_func(function() 
+                    par:add_child(dupe)
+                    dupe:set_owner(cur_scene)
+                    model:set_selected_nodes({dupe})
+                end)
+            cmd:add_undo_func(function() 
+                    par:remove_child(dupe)
+                    model:set_selected_nodes(sel)
+                end)
+                
+            model:commit_command(cmd)
+            
         end, "ctrl+d")
 
     self.action_dispatcher:add_action("Delete Node", function()
 
-            local scene = self:get_active_scene()
-            local selection = scene:get_selected_nodes()
+            local model = self:get_active_scene_model()
+            local selection = model:get_selected_nodes()
             local sel = selection[1]
             if not sel then return end
-
-            local par = sel:get_parent()
-
-            local cmd = scene:create_command("Delete Node")
-
-            if par then
-                local c_index = par:get_child_index(sel)
-                cmd:add_do_func(function() 
-                        par:remove_child(sel)
-                        scene:set_selected_nodes({})
+                        
+            local tree = model:get_tree()
+            local cmd = model:create_command("Delete Node")
+            
+            local cur_scene = tree:get_current_scene()
+            
+            if sel == cur_scene then
+                cmd:add_do_func(function()
+                        tree:set_current_scene(nil)
+                        model:set_selected_nodes({})
                     end)
-
+                    
+                cmd:add_undo_func(function()
+                        tree:set_current_scene(sel)
+                        model:set_selected_nodes(sel)
+                    end)
+            else
+                if sel:get_owner() ~= cur_scene then return end
+                        
+                local par = sel:get_parent()
+                local c_index = par:get_child_index(sel)
+                cmd:add_do_func(function()
+                        par:remove_child(sel)
+                        model:set_selected_nodes({})
+                    end)
+                    
                 cmd:add_undo_func(function()
                         par:add_child(sel)
                         par:move_child(sel, c_index)
-                        sel:set_owner(par)
-                        scene:set_selected_nodes(selection)
-                    end)
-
-            else
-                cmd:add_do_func(function()
-                        scene:get_tree():set_root(nil)
-                        scene:set_selected_nodes({})
-                    end)
-
-                cmd:add_undo_func(function()
-                        scene:get_tree():set_root(sel)
-                        scene:set_selected_nodes(selection)
+                        
+                        -- Take ownership again of any unowned nodes
+                        local stack = {sel}
+                        repeat
+                            local top = table.remove(stack)
+                            if not top:get_owner() then
+                                top:set_owner(cur_scene)
+                            end
+                        
+                            for _,c in ipairs(top:get_children()) do
+                                table.insert(stack, c)
+                            end
+                        
+                        until #stack == 0
+                        
+                        
                     end)
             end
 
-            scene:commit_command(cmd)
+            model:commit_command(cmd)
 
         end, "delete")
 
@@ -236,14 +274,14 @@ function Editor:initialize()
     end)
 
     self.action_dispatcher:add_action("Toggle Grid", function()
-            local scene = self:get_active_scene()
-            scene:set_draw_grid( not scene:get_draw_grid() )
+            local model = self:get_active_scene_model()
+            model:set_draw_grid( not model:get_draw_grid() )
         end, "ctrl+g")
 
     self.action_dispatcher:add_action("Toggle Physics Debug", function()
-            local scene = self:get_active_scene()
-            local tree = scene:get_tree()
-            tree:set_debug_draw_physics(not tree:get_debug_draw_physics())
+            local model = self:get_active_scene_model()
+            local tree = model:get_tree()
+            model:set_debug_draw_physics(not model:get_debug_draw_physics())
         end, "ctrl+]")
         
     self.action_dispatcher:add_action("Toggle Undo/Redo Stack Debug", function()
@@ -286,17 +324,17 @@ function Editor:initialize()
 end
 
 function Editor:update(dt)
-    local scene = self:get_active_scene()
-    local tree = scene:get_tree()
+    local model = self:get_active_scene_model()
+    local tree = model:get_tree()
     tree:editor_update(dt)
 end
 
-function Editor:get_active_scene()
+function Editor:get_active_scene_model()
     return self.scene_models[self.active_scene]
 end
 
 function Editor:get_active_view()
-    return self:get_active_scene():get_tree():get_viewport()
+    return self:get_active_scene_model():get_tree():get_viewport()
 end
 
 function Editor:add_action(name, func, shortcut)
@@ -330,7 +368,7 @@ function Editor:_close_scene(index)
         self.active_scene = self.active_scene - 1
     end
 
-    local scene = table.remove(self.scene_models, index)
+    table.remove(self.scene_models, index)
 
     if (#self.scene_models == 0) then
         self:add_new_scene()
@@ -347,8 +385,8 @@ function Editor:_on_close_modal_button_pressed(index, button)
 end
 
 function Editor:close_scene(index)
-    local scene = self.scene_models[index]
-    if scene:get_modified() then
+    local model = self.scene_models[index]
+    if model:get_modified() then
         local am = self:get_node("AlertModal")
         am:show("Alert!", "Scene has unsaved changes. Close anyways?", {"Confirm", "Cancel"})
         am:connect("button_pressed", self, "_on_close_modal_button_pressed")
@@ -425,8 +463,8 @@ function Editor:_draw_top_bars()
         if imgui.BeginMenu("View") then
             self:_menu_item("Recenter View")        
             imgui.Separator()
-            self:_menu_item("Toggle Grid", self:get_active_scene():get_draw_grid() )
-            self:_menu_item("Toggle Physics Debug", self:get_active_scene():get_tree():get_debug_draw_physics())
+            self:_menu_item("Toggle Grid", self:get_active_scene_model():get_draw_grid() )
+            self:_menu_item("Toggle Physics Debug", self:get_active_scene_model():get_tree():get_debug_draw_physics())
             self:_menu_item("Toggle Undo/Redo Stack Debug", self.show_stack_debug)
 
             imgui.Separator()
@@ -509,7 +547,7 @@ function Editor:_draw_scene_nodes()
     local gdim = vec2(love.graphics.getDimensions())
     local vdim = gdim - self.view_pos
 
-    local curmodel = self:get_active_scene()
+    local model = self:get_active_scene_model()
     local view = self:get_active_view()
 
     if (vdim.x > 0 and vdim.y > 0) then
@@ -522,10 +560,10 @@ function Editor:_draw_scene_nodes()
         local position = view:get_position()
         local scale = view:get_scale()
         -- Scaling for the grid is done manually so that lines are always at full resolution
-        if curmodel:get_draw_grid() then
+        if model:get_draw_grid() then
             love.graphics.push("all")
-            local minor = curmodel:get_grid_minor()
-            local major = curmodel:get_grid_major()
+            local minor = model:get_grid_minor()
+            local major = model:get_grid_major()
             love.graphics.setColor(0.4, 0.4, 0.4, 0.3)
             self:draw_grid(position, scale, minor)
             love.graphics.setColor(0.7, 0.7, 0.7, 0.3)
@@ -545,7 +583,7 @@ function Editor:_draw_scene_nodes()
         love.graphics.line(cx, 0, cx, vdim.y)
         love.graphics.pop()
 
-        curmodel:get_tree():draw(self.view_pos.x, self.view_pos.y, vdim:unpack()) 
+        model:get_tree():draw(self.view_pos.x, self.view_pos.y, vdim:unpack()) 
     end
 end
 
@@ -557,7 +595,7 @@ function Editor:draw()
     self:_draw_scene_nodes()
 
     if self.show_stack_debug then
-        local scene = self:get_active_scene()
+        local scene = self:get_active_scene_model()
         for i,v in ipairs(scene.undo_stack) do
             love.graphics.print(v.name, 200, 200 + 15 * i)
         end

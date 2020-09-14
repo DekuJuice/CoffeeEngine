@@ -35,7 +35,7 @@ function CreateResourceModal:draw()
         imgui.OpenPopup("Create Resource", "ImGuiPopupFlags_NoOpenOverExistingPopup")
     end
     
-    local model = editor:get_active_scene()
+    local model = editor:get_active_scene_model()
     
     local window_flags = {}
     imgui.SetNextWindowSize(800, 600, {"ImGuiCond_FirstUseEver"})
