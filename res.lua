@@ -70,6 +70,27 @@ end
 
 local module = {}
 
+local function finalize_resource(res, properties, fd)
+
+    if properties then
+        for k,v in pairs(properties) do
+            local setter = ("set_%s"):format(k)
+            if res[setter] then
+                local ok, err = pcall(res[setter], res, v)
+                if not ok then
+                    log.error(err)
+                end
+            else
+                log.error(("Invalid property %s, corrupted file?"):format(k))
+            end
+        end
+    end
+        
+    if res.class:isSubclassOf(ImportedResource) then -- Need to finish initialization with the imported asset
+        res:initialize_from_filedata(fd)
+    end
+end
+
 -- Get the specified resource
 -- Loads the resource in the current thread if it is not loaded
 function module.get_resource(path)
@@ -83,29 +104,29 @@ function module.get_resource(path)
     if cached then
         return cached
     end
-
-    -- Otherwise, load it from disk and cache it
+    
     local rclass = get_associated_resource_class(get_extension(path))
     if not rclass then
         log.error(("No associated resource type for %s"):format(path))
         return
     end
     
+    -- For imported resources, the filedata will be the original file
+    -- For native resources, it will just be the serialized properties
     local fd = love.filesystem.newFileData(path)
-    local res
-
-    if rclass:isSubclassOf(ImportedResource) then
+    local res = rclass()
+    local properties
+    
+    if res.class:isSubclassOf(ImportedResource) then
         local import_path = path .. "." .. settings.get_setting("import_ext")
         -- Attempt to load .import file if it exists
-        -- Deserializing the import file creates an instance of the resource
         if (love.filesystem.getInfo(import_path, "file")) then
-            local err
-            
+            local err            
             local imp, read_err = love.filesystem.read(import_path)
             if imp then
                 local ok, result = pcall(binser.deserialize, imp)
                 if ok then
-                    res = result[1]
+                    properties = result[1]
                     log.info(("Loaded import data for %s"):format(path))
                 else
                     err = result
@@ -115,46 +136,26 @@ function module.get_resource(path)
             end
             
             if err then log.error(err) end
+        else
+            log.info(("No import data for %s found, using defaults"):format(path))        
         end
-        
-        if not res then
-            log.info(("No import data for %s found, using defaults"):format(path))
-            res = rclass()
-        end
-        
-        -- Need to finish initialization with the imported asset
-        res:initialize_from_filedata(fd)
-        
-    else  -- Native resources can be directly deserialized with binser
+    else
         local ok, result = pcall(binser.deserialize, fd:getString())
         if ok then
-            res = result[1]
+            properties = result[1]
         else
             log.error(result)
             return 
         end        
-    end
+    end    
+        
+    finalize_resource(res, properties, fd)
     
-    local valid = true
+    cache_resource(path, res)
+    res:set_has_unsaved_changes(false)
+    log.info(("Loaded resource %s"):format(path))
     
-    if res then
-        local ok, result = pcall(res.isInstanceOf, res, rclass)
-        if not ok then
-            valid = false
-            log.error(result)
-        end
-    else
-        valid = false
-    end
-    
-    if valid then                
-        cache_resource(path, res)
-        res:set_has_unsaved_changes(false)
-        log.info(("Loaded resource %s"):format(path))
-        return res
-    else
-        log.error(("Resource %s is corrupted or invalid"):format(path))
-    end
+    return res
 end
 
 function module.is_resource_loaded(path)
@@ -162,9 +163,7 @@ function module.is_resource_loaded(path)
 end
 
 -- Load one or more resources in the background
-function module.load_background(paths, on_complete, on_error, on_loaded)
-    local ImportedResource = require("class.engine.resource.ImportedResource")
-    
+function module.load_background(paths, on_complete, on_error, on_loaded)    
     local lily_args = {} -- Args to pass to lily.loadMultiple
     local load_info = {} -- Information on the resource being loaded
     local lily_index_map = {} -- Map lilyIndex to load_info, since imported resources may require more than 1 file
@@ -175,40 +174,39 @@ function module.load_background(paths, on_complete, on_error, on_loaded)
     
     -- Create load infos for resources that aren't already loaded
     for _,p in ipairs(paths) do
-        if not module.is_resource_loaded(p) then
-            local rclass = get_associated_resource_class(get_extension(p))
-            if rclass then
-                local is_imported = rclass:isSubclassOf(ImportedResource)
-                local info = {
-                    imported = is_imported,
-                    path = p,
-                    class = rclass
-                }
-                local info_index = #load_info + 1
-                
-                if is_imported then
-                    local import_path = p .. "." .. settings.get_setting("import_ext")                    
-                    table.insert(lily_args, {"newFileData", p})
-                    table.insert(lily_index_map, info_index)
-                    
-                    -- Load import data if one exists
-                    if love.filesystem.getInfo(import_path, "file") then                    
-                        table.insert(lily_args, {"read", import_path})
-                        table.insert(lily_index_map, info_index)
-                    else
-                        log.info(("No import data for %s found, using defaults"):format(p))
-                        info.resource = rclass()
-                    end
-                else
-                    table.insert(lily_args, {"read", p})
-                    table.insert(lily_index_map, info_index)
-                end
-                
-                table.insert(load_info, info)
-            else
-                log.error(("No associated resource type for %s"):format(p))
-            end
+        if module.is_resource_loaded(p) then
+            goto CONTINUE
         end
+        
+        local rclass = get_associated_resource_class(get_extension(p))
+        
+        if not rclass then
+            log.error(("No associated resource type for %s"):format(p))
+            goto CONTINUE
+        end
+        
+        local is_imported = rclass:isSubclassOf(ImportedResource)
+        local info = {
+            imported = is_imported,
+            resource = rclass(),
+            path = path
+        }
+        
+        table.insert(load_info, info)
+        local info_index = #load_info
+        
+        -- Request filedata
+        table.insert(lily_args, {"newFileData", p})
+        table.insert(lily_index_map, info_index)
+        
+        if is_imported then
+            local import_path = p .. "." .. settings.get_setting("import_ext")
+            -- Request import data
+            table.insert(lily_args, {"read", import_path})
+            table.insert(lily_index_map, info_index)
+        end                
+
+        ::CONTINUE::
     end
 
     local lobj = lily.loadMulti(lily_args)
@@ -216,73 +214,50 @@ function module.load_background(paths, on_complete, on_error, on_loaded)
     lobj:onLoaded(function(_, lily_index, data)
         local index = lily_index_map[lily_index]
         local info = load_info[index]
-        
-        local case
+        -- Import data
         if type(data) == "string" then
-            if info.imported then   
-                case = "ImportSettings"
-            else
-                case = "NativeResource"
-            end
+            info.import_data = data        
+        -- Filedata
         else
-            case = "ImportFileData"
-        end
-        
-        if case == "NativeResource" then
-            local ok, result = pcall(binser.deserialize, data)
-            if ok then
-                loaded_resources[index] = result[1]
-                cache_resource(info.path, result[1])
-                result[1]:set_has_unsaved_changes(false)
-                log.info(("Loaded in background %s"):format(info.path))
-            else
-                log.error(result)
-                if on_error then on_error(index, result) end
-            end
-        else
-            if case == "ImportSettings" then
-                local ok, result = pcall(binser.deserialize, data)
-                if ok then
-                    info.resource = result[1]
-                else
-                    log.error(result)
-                    info.resource = info.class()
-                    if on_error then on_error(index, result) end
-                end                
-            elseif case == "ImportFileData" then
-                info.filedata = data
-            end
-            
-            -- Finalize import
-            if info.resource and info.filedata then
-                local ok, err = pcall(info.resource.initialize_from_filedata, info.resource, info.filedata)
-                if ok then
-                    loaded_resources[index] = info.resource
-                    cache_resource(info.path, info.resource)
-                    info.resource:set_has_unsaved_changes(false)
-                    log.info(("Loaded in background %s"):format(info.path))
-                else
-                    log.error(err)
-                    if on_error then on_error(index, err) end
-                end
-            end
+            info.filedata = data
         end
     end)
 
     lobj:onComplete(function()
+    
+        for _, info in ipairs(load_info) do
+        
+            if not info.filedata then goto CONTINUE end
+            
+            local properties
+            local data_str
+            if info.imported then            
+                data_str = info.import_data       
+            else
+                data_str = info.filedata:getString()
+            end
+            
+            local ok, res = pcall(binser.deserialize, data_str)
+            if ok then
+                properties = res[1]
+            else
+                log.error(res)
+            end
+            
+            finalize_resource(info.resource, properties, info.filedata)
+            cache_resource(info.path, info.resource)
+            info.resource:set_has_unsaved_changes(false)
+            
+            ::CONTINUE::
+        end
+    
         if on_complete then on_complete(loaded_resources) end
     end)
     
     lobj:onError(function(_, lily_index, msg)
         local index = lily_index_map[lily_index]
         local info = load_info[index]
-        
         log.error(msg)
-        
-        if info.imported and lily_args[lily_index][1] == "read" then
-            info.resource = info.class()
-        end
-        
         if on_error then on_error(index, msg) end
     end)
     
@@ -338,11 +313,17 @@ function module.save_resource(resource)
         target_path = ("%s.%s"):format(target_path, settings.get_setting("import_ext"))
     end
     
-    -- Resource only serialize to a reference by default
-
-    resource:set_serialize_full(true)
-    local data = binser.serialize(resource)
-    resource:set_serialize_full(false)
+    local properties = {}
+    for name, ep in pairs(resource.class:get_exported_vars()) do
+        local getter = ("get_%s"):format(name)
+        local val = resource[getter](resource)
+        
+        if val ~= ep.default then
+            properties[name] = val 
+        end
+    end
+    
+    local data = binser.serialize(properties)
     
     module.write_file(target_path, data, function() 
         log.info(("Saved resource %s"):format(filepath))

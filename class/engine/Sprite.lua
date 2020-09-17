@@ -16,8 +16,6 @@ Sprite:export_var("color", "color")
 Sprite:export_var("viewport_pos", "vec2_int", {min = -math.huge, max = math.huge} )
 Sprite:export_var("viewport_dimensions", "vec2_int", {min = 0, max = math.huge} )
 
-Sprite:binser_register()
-
 function Sprite:initialize()
     Node2d.initialize(self)
     self.offset = vec2(0, 0)

@@ -42,29 +42,14 @@ function ScenePlayer:play(scene)
     self.player_tree:get_viewport():set_resolution(settings.get_setting("game_width"), settings.get_setting("game_height"))
     self.player_tree:set_debug_draw_physics( scene:get_tree():get_debug_draw_physics() )
     
-    -- Create autoloads
-    for _, path in ipairs(settings.get_setting("autoload_scenes")) do
-        local as = resource.get_resource( path )
-        if not as then
-            log.error(("Failed to get autoload %s"):format(path))
-            
-            
-            self:_cleanup()
-            return
-        end
-        
-        local ok, res = pcall(as.instance, as)
-        if not ok then
-            log.error(res)
-            self:_cleanup()
-            return
-        end
-        
-        self.player_tree:get_root():add_child( res )        
+    local ok, msg = pcall(self.player_tree.create_autoload_scenes, self.player_tree)
+    if not ok then
+        log.error(msg)
+        self:_cleanup()
+        return
     end
     
-    
-    local ok, msg  = pcall(self.player_tree.set_current_scene, self.player_tree, instance)
+    ok, msg  = pcall(self.player_tree.set_current_scene, self.player_tree, instance)
     if not ok then
         log.error(msg)
         self:_cleanup()
@@ -74,6 +59,7 @@ end
 
 function ScenePlayer:update(dt)
     if self.open then
+        self.player_tree:update(dt)
         local ok,err = pcall(self.player_tree.update, self.player_tree, dt)
         if not ok then
             log.error(err)

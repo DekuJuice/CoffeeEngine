@@ -11,9 +11,9 @@
 -- are NOT intersecting are checked. This means that if an actor and obstacle somehow overlap,
 -- no further collision checks between them will be made.  This is for the sake of crush resolution
 
-local shash = require("enginelib.shash")
 local intersect = require("enginelib.intersect")
 
+local SpatialHash = require("class.engine.SpatialHash")
 local Object = require("class.engine.Object")
 local Actor = require("class.engine.Actor")
 local Obstacle = require("class.engine.Obstacle")
@@ -32,9 +32,9 @@ function PhysicsWorld:initialize()
     Object.initialize(self)
 
     self.collidables = {}    
-    self.actor_shash = shash.new(CELL_SIZE)
-    self.obstacle_shash = shash.new(CELL_SIZE)
-    self.area_shash = shash.new(CELL_SIZE)
+    self.actor_shash = SpatialHash(CELL_SIZE)
+    self.obstacle_shash = SpatialHash(CELL_SIZE)
+    self.area_shash = SpatialHash(CELL_SIZE)
     -- Tilemaps are a special case, since there likely won't be more than
     -- 2 or 3 collidable layers, we'll just check all of them instead of bothering with spatial hashing it
     self.tilemaps = {}

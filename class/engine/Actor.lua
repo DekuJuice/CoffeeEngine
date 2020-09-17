@@ -1,3 +1,8 @@
+local AABB_EXTENTS_DEFAULT = vec2(8, 16)
+local AABB_OFFSET_DEFAULT = vec2(0, 0)
+local CLING_DIST_DEFAULT = 1
+local CLIMB_DIST_DEFAULT = 1
+
 local intersect = require("enginelib.intersect")
 
 local Collidable = require("class.engine.Collidable")
@@ -7,30 +12,27 @@ Actor.static.icon = IconFont and IconFont.USER
 
 Actor:define_signal("actor_crushed")
 
-Actor:export_var("aabb_extents", "vec2_int", {speed = 0.2, min = 0, max = math.huge} )
-Actor:export_var("aabb_offset", "vec2_int", {speed = 0.2, min = -math.huge, max = math.huge})
-Actor:export_var("cling_dist", "int", {speed = 0.05, min = 0, max = 16})
-Actor:export_var("climb_dist", "int", {speed = 0.05, min = 0, max = 16})
+Actor:export_var("aabb_extents", "vec2_int", {default = AABB_EXTENTS_DEFAULT, speed = 0.2, min = 0, max = math.huge} )
+Actor:export_var("aabb_offset", "vec2_int", {default = AABB_OFFSET_DEFAULT, speed = 0.2, min = -math.huge, max = math.huge})
+Actor:export_var("cling_dist", "int", {default = CLING_DIST_DEFAULT, speed = 0.05, min = 0, max = 16})
+Actor:export_var("climb_dist", "int", {default = CLIMB_DIST_DEFAULT, speed = 0.05, min = 0, max = 16})
 
 Actor:define_get_set("on_ground")
 Actor:define_get_set("on_ceil")
 Actor:define_get_set("on_wall")
 Actor:define_get_set("on_slope")
 Actor:define_get_set("jump_down_one_way")
-
 Actor:define_get_set("stick_moving_ground")
 Actor:define_get_set("stick_moving_wall_left")
 Actor:define_get_set("stick_moving_wall_right")
 Actor:define_get_set("stick_moving_ceil")
 
-Actor:binser_register()
-
 function Actor:initialize()
     Collidable.initialize(self)
-    self.aabb_extents = vec2(8, 16)
-    self.aabb_offset = vec2(0, 0)
-    self.cling_dist = 1
-    self.climb_dist = 1
+    self.aabb_extents = AABB_EXTENTS_DEFAULT:clone()
+    self.aabb_offset = AABB_OFFSET_DEFAULT:clone()
+    self.cling_dist = CLIMB_DIST_DEFAULT
+    self.climb_dist = CLIMB_DIST_DEFAULT
 
     self.on_ground = false
     self.on_ceil = false
@@ -45,7 +47,6 @@ function Actor:initialize()
     self.stick_moving_wall_left = false
     self.stick_moving_wall_right = false
     self.stick_moving_ceil = false
-
 end
 
 function Actor:move_and_collide(delta)

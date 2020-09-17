@@ -22,56 +22,14 @@ end
 -- Only used in editor
 Node:define_get_set("owner") 
 Node:define_get_set("filepath") -- If node was instanced, the scene root will have its filename set to the file it was instanced from
+Node:define_get_set("is_inherited_scene") -- Blocks editing if node is direct child of inherited scene
 
-Node:export_var("name", "string", 
-    {filter = function(_, name) return validate_node_name(name) end, 
+Node:export_var("name", "string", {
+    filter = function(_, name) return validate_node_name(name) end
 })
     
 Node:export_var("tags", "data")
 Node:export_var("visible", "data")
---[[
-function Node:_serialize()
-    return Object._serialize(self)
-end
-
-Node.static.binser_register = function(class)
-    if not rawget(class.static, "_deserialize") then
-        class.static._deserialize = function(data, filepath)
-            local instance
-            
-            if filepath then
-                local ps = resource.get_resource(filepath)
-                local ok, res = pcall(ps.instance, ps)
-                if ok then
-                    instance = res
-                    instance.is_instance = true
-                    instance:set_filepath(filepath)
-                else
-                    instance = class()
-                    instance.invalid = true
-                    return instance
-                end
-            else
-                instance = class()
-            end
-            
-            for _,v in ipairs(data) do
-                local key = v[1]
-                local val = v[2]
-                
-                local setter = ("set_%s"):format(key)
-                instance[setter](instance, val)
-            end
-            
-            return instance
-        end
-    end
-    
-    binser.register(class.__instanceDict, class.name, class._serialize, class._deserialize)
-end
-]]--
-
-Node:binser_register()
 
 function Node:initialize()
     Object.initialize(self)
@@ -402,6 +360,7 @@ function Node:get_relative_path(other)
     local rel = p2:sub(j + 1, -2):gsub("[^/]+", "..")
     
     local path = rel .. root
+    if path:sub(1, 1) == "/" then path = path:sub(2) end
     
     return path
 end
@@ -424,6 +383,7 @@ local function test_get_relative_path(p1, p2)
     
     local path = rel .. root
     
+    if path:sub(1, 1) == "/" then path = path:sub(2) end
     
 end
 
@@ -482,7 +442,6 @@ function Node:remove_tag(tag)
     self.tags[tag] = nil
 end
 
-
 function Node:propagate_event_preorder(name, allow_interrupt, ...)
     if self:event(name, ...) and allow_interrupt then
         return true
@@ -518,7 +477,11 @@ function Node:event(name, ...)
 end
 
 function Node:_print_tree(indent_level)
-    print(string.rep("\t", indent_level) .. self:get_name())
+    
+    local str = string.rep("\t", indent_level) .. self:get_name()
+    if self.owner then str = str .. " " .. self.owner:get_name() end
+        
+    print(str)
 
     for _,c in ipairs(self.children) do
         c:_print_tree(indent_level + 1)    

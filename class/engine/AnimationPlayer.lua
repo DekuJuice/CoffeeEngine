@@ -4,28 +4,41 @@ local AnimationPlayer = Node:subclass("AnimationPlayer")
 AnimationPlayer.static.icon = IconFont and IconFont.FILM
 
 AnimationPlayer:define_signal("animation_finished")
+AnimationPlayer:define_get_set("current_animation")
+AnimationPlayer:define_get_set("playback_position")
+
+AnimationPlayer:export_var("animations", "data", {is_changed =  function(v) return #v ~= 0 end })
+AnimationPlayer:export_var("autoplay", "bool", {default = false })
 
 function AnimationPlayer:initialize()
     Node.initialize(self)
     
     self.animations = {}
     self.autoplay = false
-    self.playing = false
-    self.current_animation = nil
     self.initial_animation = nil
-    
-    self.playback_position = 0
+
+    self.playing = false
+    self.current_animation = nil    
+    self.playback_position = 0.0
 end
 
 function AnimationPlayer:ready()
+    
     if self.autoplay then        
         self:play()
     end
+    
+    self:update(0)
+    
     self.current_animation = self.initial_animation
 end
 
+function AnimationPlayer:editor_ready()
+    self:update(0)
+end
+
 function AnimationPlayer:_update_var_track(anim, t_index)
-    local node_path = anim:track_get_node_path(t_index)
+    local node_path = anim:get_track_node_path(t_index)
     local target_node = self:get_node(node_path)
     
     if not target_node then
@@ -53,7 +66,7 @@ function AnimationPlayer:_update_var_track(anim, t_index)
     if anim:variable_track_get_update_discrete(t_index) then
         
         if pi then
-            final_val = anim:variable_track_get_value(t_index, pi)
+            final_val = anim:variable_track_get_key_value(t_index, pi)
         else
             return
         end
@@ -61,16 +74,16 @@ function AnimationPlayer:_update_var_track(anim, t_index)
     else
     
         if not pi then
-            final_val = anim:variable_track_get_value(t_index, ni)
+            final_val = anim:variable_track_get_key_value(t_index, ni)
         elseif not ni then
-            final_val = anim:variable_track_get_value(t_index, pi)
+            final_val = anim:variable_track_get_key_value(t_index, pi)
         else
         
-            local ptime = anim:track_get_key_time(t_index, pi)
-            local ntime = anim:track_get_key_time(t_index, ni)
+            local ptime = anim:get_keyframe_time(t_index, pi)
+            local ntime = anim:get_keyframe_time(t_index, ni)
             
-            local pval = anim:variable_track_get_value(t_index, pi)
-            local nval = anim:variable_track_get_value(t_index, ni)
+            local pval = anim:variable_track_get_key_value(t_index, pi)
+            local nval = anim:variable_track_get_key_value(t_index, ni)
             
             local t_dist = ntime - ptime
             if ntime < ptime then
@@ -98,7 +111,7 @@ function AnimationPlayer:_update_var_track(anim, t_index)
 end
 
 function AnimationPlayer:_update_func_track(anim, t_index, time_start, dt)
-    local node_path = anim:track_get_node_path(t_index)
+    local node_path = anim:get_track_node_path(t_index)
     local target_node = self:get_node(node_path)
     if not target_node then
         log.error(("Node path %q does not point to any node"):format(node_path))
@@ -108,8 +121,8 @@ function AnimationPlayer:_update_func_track(anim, t_index, time_start, dt)
     local indices = anim:function_track_get_key_indices(t_index, time_start, dt)
     
     for _, i in ipairs(indices) do
-        local func_name = anim:function_track_get_function_name(t_index, i)
-        local func_args = anim:function_track_get_function_arguments(t_index, i)
+        local func_name = anim:function_track_get_key_func_name(t_index, i)
+        local func_args = anim:function_track_get_key_args(t_index, i)
         
         if type(target_node[func_name]) == "function" then
             target_node[func_name](unpack(func_args))
@@ -134,9 +147,9 @@ function AnimationPlayer:update(dt)
             self.playing = false
         end            
     end 
-        
+    
     for i = 1, anim:get_track_count() do
-        local ttype = anim:track_get_type(i)
+        local ttype = anim:get_track_type(i)
         if ttype == "var" then                
             self:_update_var_track(anim, i)
         elseif ttype == "func" then
@@ -161,7 +174,7 @@ function AnimationPlayer:editor_update(dt)
     end 
         
     for i = 1, anim:get_track_count() do
-        local ttype = anim:track_get_type(i)
+        local ttype = anim:get_track_type(i)
         if ttype == "var" then                
             self:_update_var_track(anim, i)
         end
@@ -196,7 +209,7 @@ function AnimationPlayer:set_playback_position(pos, update)
 
     if update and cur then
         for i = 1, cur:get_track_count() do
-            local ttype = cur:track_get_type(i)
+            local ttype = cur:get_track_type(i)
             if ttype == "var" then
                 self:_update_var_track(cur, i)
             end
@@ -211,7 +224,7 @@ function AnimationPlayer:add_animation(anim)
         oname = oname:gsub("%d+$", "")
         oname = ("%s%d"):format(oname, num)
         anim:set_name(oname)
-    end
+    end    
     
     self.animations[oname] = anim 
 end
@@ -236,12 +249,6 @@ function AnimationPlayer:get_animation_list()
     return list
 end
 
-AnimationPlayer:define_get_set("playback_position")
-AnimationPlayer:define_get_set("current_animation")
-
-AnimationPlayer:export_var("animations", "data")
-AnimationPlayer:export_var("autoplay", "bool")
 AnimationPlayer:export_var("initial_animation", "enum", {enum = AnimationPlayer.get_animation_list, include_nil = true})
-AnimationPlayer:binser_register()
 
 return AnimationPlayer

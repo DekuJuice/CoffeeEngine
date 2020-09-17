@@ -8,8 +8,6 @@ Obstacle:export_var("heightmap", "array", {array_type = "int", init_value = 0})
 Obstacle:export_var("flip_h", "bool")
 Obstacle:export_var("flip_v", "bool")
 
-Obstacle:binser_register()
-
 function Obstacle:initialize()
     Collidable.initialize(self)
     

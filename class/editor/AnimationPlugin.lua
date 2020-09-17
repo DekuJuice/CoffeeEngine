@@ -74,8 +74,14 @@ function AnimationPlugin:enter_tree()
     local n2 = require("class.engine.Node2d")()
     scene:get_tree():set_current_scene(n2)
     
+    local n3 = require("class.engine.Node2d")()
+    
     n2:add_child(ap)
     ap:set_owner( n2 )
+    ap:add_child(n3)
+    n3:set_owner(n2)
+    
+    ap:connect("animation_finished", n3, "flag_position_dirty")
 
     scene:set_selected_nodes({ap})
 
@@ -101,23 +107,23 @@ function AnimationPlugin:update(dt)
                 local st = self.selected_track
                 local kf = self.selected_keyframe
                 local nt = self.keyframe_drag_time
-                local old_t = anim:track_get_key_time(st, kf)
+                local old_t = anim:get_keyframe_time(st, kf)
                 
                 local cmd = model:create_command("Move keyframe")
                 cmd:add_do_func(function()
                     self.selected_track = st
-                    anim:track_set_key_time(st, kf, nt)
-                    self.selected_keyframe = anim:track_get_key_index(st, nt)
+                    anim:set_keyframe_time(st, kf, nt)
+                    self.selected_keyframe = anim:get_keyframe_index(st, nt)
                 end)
                         
-                local old_i = anim:track_get_key_index(st, nt)
+                local old_i = anim:get_keyframe_index(st, nt)
                 if old_i then
                     
                 else
                     cmd:add_undo_func(function()
-                        local i = anim:track_get_key_index(st, nt)
-                        anim:track_set_key_time(st, i, old_t)
-                        self.selected_keyframe = anim:track_get_key_index(st, old_t)
+                        local i = anim:get_keyframe_index(st, nt)
+                        anim:set_keyframe_time(st, i, old_t)
+                        self.selected_keyframe = anim:get_keyframe_index(st, old_t)
                     end)
                 end
                         
@@ -482,6 +488,7 @@ function AnimationPlugin:draw()
             local fpos = math.floor(animp:get_playback_position() * self.framerate)
             local flen = math.floor(animation:get_length() * self.framerate)
             local changed, new = imgui.DragInt("Playback Position", fpos, 0.1, 0, flen, "Frame %d")
+            
             if changed then
                 animp:set_playback_position(new / self.framerate, true)
             end
@@ -510,13 +517,13 @@ function AnimationPlugin:draw()
         imgui.SameLine()
         if imgui.Button("Insert Keyframe") then
             if self.selected_track <= animation:get_track_count() then
-                local tt = animation:track_get_type(self.selected_track)
+                local tt = animation:get_track_type(self.selected_track)
                 if tt == "func" then
                     self:_open_func_track_keyframe_modal()
                 elseif tt == "var" then
                     
                     local ti = self.selected_track
-                    local np = animation:track_get_node_path(ti)
+                    local np = animation:get_track_node_path(ti)
                     local n = animp:get_node(np)
                     local prop = animation:variable_track_get_property(ti)
                     local getter = ("get_%s"):format(prop)
@@ -530,9 +537,9 @@ function AnimationPlugin:draw()
                             animation:variable_track_add_key(ti, t, val)
                         end)
                         
-                        local old_i = animation:track_get_key_index(ti, t)
+                        local old_i = animation:get_keyframe_index(ti, t)
                         if old_i then
-                            local old_v = animation:variable_track_get_value(ti, old_i)
+                            local old_v = animation:variable_track_get_key_value(ti, old_i)
                             local old_lerp = animation:variable_track_get_lerp(ti, old_i)
                             
                             cmd:add_undo_func(function()
@@ -542,8 +549,8 @@ function AnimationPlugin:draw()
                         else
                             
                             cmd:add_undo_func(function()
-                                local i = animation:track_get_key_index(ti, t)
-                                animation:track_remove_key(ti, i)                                
+                                local i = animation:get_keyframe_index(ti, t)
+                                animation:remove_keyframe(ti, i)                                
                             end)
                         end
                         
@@ -764,9 +771,9 @@ function AnimationPlugin:draw()
                         col_pop = col_pop + 2
                     end
 
-                    local np = animation:track_get_node_path(i)
+                    local np = animation:get_track_node_path(i)
                     local target_node = animp:get_node(np)
-                    local track_type = animation:track_get_type(i)                    
+                    local track_type = animation:get_track_type(i)                    
 
                     imgui.TableSetColumnIndex(0)
                     if imgui.SmallButton(("%s##DelTrack%d"):format(IconFont.TRASH, i)) then
@@ -865,8 +872,8 @@ function AnimationPlugin:draw()
                         end
                         -- Keyframes
                         local j = 1
-                        while j <= animation:track_get_key_count(i) do
-                            local ktime = animation:track_get_key_time(i, j)
+                        while j <= animation:get_keyframe_count(i) do
+                            local ktime = animation:get_keyframe_time(i, j)
                             local kx = ktime * PIXELS_PER_SECOND * zoom
                             imgui.SetCursorPos(cx + kx - 14, cy + min_height/2 - 8)                            
                             imgui.InvisibleButton(("##Keyframe%d_%d"):format(i,j), 20, 16)
@@ -886,17 +893,17 @@ function AnimationPlugin:draw()
                                 local index = i
                                 
                                 cmd:add_do_func(function()
-                                    animation:track_remove_key(index, kf)
+                                    animation:remove_keyframe(index, kf)
                                     if self.selected_keyframe == kf then
                                         self.selected_keyframe = nil    
                                     end
                                 end)
                                 
-                                local old_t = animation:track_get_key_time(index, kf)
+                                local old_t = animation:get_keyframe_time(index, kf)
                                 
                                 if track_type == "func" then
-                                    local ofunc = animation:function_track_get_function_name(index, kf)
-                                    local oarg = animation:function_track_get_function_arguments(index, kf)
+                                    local ofunc = animation:function_track_get_key_func_name(index, kf)
+                                    local oarg = animation:function_track_get_key_args(index, kf)
                                     
                                     
                                     cmd:add_undo_func(function()
@@ -904,7 +911,7 @@ function AnimationPlugin:draw()
                                     end)
                                     
                                 elseif track_type == "var" then
-                                    local old_v = animation:variable_track_get_value(index, kf)
+                                    local old_v = animation:variable_track_get_key_value(index, kf)
                                     local old_l = animation:variable_track_get_lerp(index, kf)
                                     cmd:add_undo_func(function()
                                         animation:variable_track_add_key(index, old_t, old_v, old_l)
@@ -920,10 +927,10 @@ function AnimationPlugin:draw()
                             if imgui.IsItemHovered() and not self.keyframe_drag then
                                 imgui.BeginTooltip()
                                 if track_type == "func" then
-                                    local func_name = animation:function_track_get_function_name(i, j)
+                                    local func_name = animation:function_track_get_key_func_name(i, j)
                                     imgui.Text(("%s(...)"):format(func_name))
                                 elseif track_type == "var" then
-                                    local val = animation:variable_track_get_value(i, j)
+                                    local val = animation:variable_track_get_key_value(i, j)
                                     imgui.Text(tostring(val))
                                 end
                                 imgui.EndTooltip()

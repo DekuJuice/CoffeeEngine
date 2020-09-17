@@ -1,28 +1,24 @@
 -- Module loosely based off https://github.com/rxi/shash/blob/master/shash.lua
 -- MIT License
 
-local module = {}
-module.__index = module
+local class = require("enginelib.middleclass")
+local SpatialHash = class("SpatialHash")
 
 local function get_key(x, y)
     return x + y * 1e7
 end
 
-function module.new(cellsize)
-    local self = setmetatable({}, module)
-    
+function SpatialHash:initialize(cellsize)
     self.cellsize = cellsize or 64
     self.cells = {}
     self.objects = {}
-    
-    return self
 end
 
-function module:get_cell_position(x, y)
+function SpatialHash:get_cell_position(x, y)
     return math.floor(x / self.cellsize), math.floor(y / self.cellsize)
 end
 
-function module:_add_to_cells(obj, x, y, w, h)
+function SpatialHash:_add_to_cells(obj, x, y, w, h)
     local x1, y1 = self:get_cell_position(x, y)
     local x2, y2 = self:get_cell_position(x + w, y + h)
     for x = x1, x2 do
@@ -34,7 +30,7 @@ function module:_add_to_cells(obj, x, y, w, h)
     end
 end
 
-function module:_remove_from_cells(obj)
+function SpatialHash:_remove_from_cells(obj)
     local e = self.objects[obj]
     
     local x1, y1 = self:get_cell_position(e[1], e[2])
@@ -61,13 +57,13 @@ function module:_remove_from_cells(obj)
     end
 end
 
-function module:add_object(obj, x, y, w, h)
+function SpatialHash:add_object(obj, x, y, w, h)
     assert(not self:has_object(obj), "Object is already in hash")
     self.objects[obj] = {x, y, w, h}
     self:_add_to_cells(obj, x, y, w, h)
 end
 
-function module:update_object(obj, x, y, w, h)
+function SpatialHash:update_object(obj, x, y, w, h)
     assert(self:has_object(obj), "Object is not in hash")
     
     self:_remove_from_cells(obj)
@@ -80,15 +76,15 @@ function module:update_object(obj, x, y, w, h)
     e[4] = h
 end
 
-function module:has_object(obj)
+function SpatialHash:has_object(obj)
     return self.objects[obj] ~= nil
 end
 
-function module:get_objects()
+function SpatialHash:get_objects()
     return self.objects
 end
 
-function module:remove_object(obj)
+function SpatialHash:remove_object(obj)
     
     assert(self:has_object(obj), "Object is not in hash")
     self:_remove_from_cells(obj)
@@ -96,7 +92,7 @@ function module:remove_object(obj)
 
 end
 
-function module:get_nearby_in_rect(x, y, w, h)
+function SpatialHash:get_nearby_in_rect(x, y, w, h)
     local objs = {}
     local already = {}
     
@@ -120,7 +116,7 @@ function module:get_nearby_in_rect(x, y, w, h)
     return objs
 end
 
-function module:get_nearby_objects(obj)
+function SpatialHash:get_nearby_objects(obj)
     assert(self:has_object(obj), "Object is not in hash")
     
     local e = self.objects[obj]
@@ -129,9 +125,9 @@ function module:get_nearby_objects(obj)
     return self:get_in_rect(x, y, w, h)
 end
 
-function module:clear()
+function SpatialHash:clear()
     self.cells = {}
     self.objects = {}
 end
 
-return module
+return SpatialHash

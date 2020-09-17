@@ -161,7 +161,7 @@ function SceneModel:initialize(loadpath)
         -- Clear filepath, as we're loading the scene directly for editing,
         -- not instancing it
         scene:set_filepath(nil)        
-        self.tree:get_root():set_current_scene(scene)
+        self.tree:set_current_scene(scene)
         
     end
 end

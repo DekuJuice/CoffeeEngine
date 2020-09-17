@@ -281,7 +281,7 @@ function Editor:initialize()
     self.action_dispatcher:add_action("Toggle Physics Debug", function()
             local model = self:get_active_scene_model()
             local tree = model:get_tree()
-            model:set_debug_draw_physics(not model:get_debug_draw_physics())
+            tree:set_debug_draw_physics(not tree:get_debug_draw_physics())
         end, "ctrl+]")
         
     self.action_dispatcher:add_action("Toggle Undo/Redo Stack Debug", function()

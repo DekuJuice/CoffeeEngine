@@ -21,10 +21,27 @@ function InstanceSceneModal:confirm_selection()
         return
     end
     
+    -- Check for cyclical instancing
+    local stack = {res}
+    if model:get_filepath() then
+        while #stack > 0 do
+        
+            local top = table.remove(stack)
+            for _,v in ipairs(top.children) do
+                table.insert(stack, v)
+            end
+        
+            if top:get_filepath() == model:get_filepath() then
+                log.error("Cycle found while instancing")
+                self.is_open = false
+                return
+            end
+        end
+    end
+    
+    
     local root = tree:get_root()
-    
-    
-    
+
     local cmd = model:create_command("Instance Node")
     local cur_scene = tree:get_current_scene()
     

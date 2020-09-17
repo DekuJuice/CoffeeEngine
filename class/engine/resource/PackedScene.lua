@@ -6,72 +6,148 @@ local PackedScene = Resource:subclass("PackedScene")
 PackedScene.static.extensions = {"scene"}
 PackedScene.static.dontlist = true
 PackedScene:export_var("data", "data")
-PackedScene:binser_register()
 
 function PackedScene:instance()
     
-    -- Reconstruct tree
     local node_list = binser.deserialize(self.data)[1]
-        
-    -- First node is always the root
-    local root = node_list[1].node
-    root:set_filepath(self.filepath)
+    
+    local root
+    if node_list[1].filepath then
+        root = resource.get_resource(node_list[1].filepath):instance()
+    else
+        root = node_list[1].class()        
+    end
+    
+    for k,v in pairs(node_list[1].properties) do
+        local setter = ("set_%s"):format(k)
+        root[setter](root, v)
+    end
     
     for i = 2, #node_list do
-        local n = node_list[i]
-        
-        if type(n.node) == "string" then
-            n.node = resource.get_resource(n.node):instance()
+        local info = node_list[i]
+        local node
+        if info.class then
+            node = info.class()
+        elseif info.filepath then
+            node = resource.get_resource(info.filepath):instance()
+        else
+            node = root:get_node(info.path)
+            if not node then
+                log.warn("Missing node, inherited scene was changed?")
+                goto CONTINUE
+            end
         end
         
-        -- We can assume the parent is already created since the parent
-        -- index will always be less than the current
-        local parent = node_list[n.parent_index].node
-        parent:add_child(n.node)
-        n.node:set_owner(root)
-    end    
+        for k,v in pairs(info.properties) do
+            local setter = ("set_%s"):format(k)
+            node[setter](node, v)
+        end
+        
+        if not info.path then
+            root:get_node(info.parent):add_child(node)
+        end 
+        node:set_owner(root)
+        
+        ::CONTINUE::
+    end
+    
+    root:set_filepath( self:get_filepath() )
     
     return root
 end
 
 -- Packs the given root node into scene data
 -- Only nodes owned by the root (+ the root itself) are saved
+-- Only signals between children of root or to autoload nodes are preserved
 function PackedScene:pack(root)
-    -- TODO: Save signals/slots
     -- Idea: Keep a list of all resources referenced for preloading purposes?
     
     -- Nodes are listed in preorder to make reconstruction of 
     -- the tree easier
     
+    local instance_defaults = {}
     local node_list = {}
-    local index_map = {}
-    
-    local stack = {root}
+    local stack = { root }
     while #stack > 0 do
         local top = table.remove(stack)
-        local node
         
-        if top ~= root and top:get_filepath() then
-            node = top:get_filepath()
-        else
-            node = top
+        -- Ignore children of instanced nodes that aren't part of an inherited scene
+        if top ~= root and top:get_owner() ~= root then goto CONTINUE end
+        
+        local instanced = top:get_filepath() ~= nil
+        local inherited = top:get_is_inherited_scene()
+        
+        -- Node was instanced from a file, load the default values for comparison
+        if instanced then
+            instance_defaults[top:get_filepath()] = resource.get_resource( top:get_filepath() ):instance()
         end
         
-        local d = {
-            node = node,
-            parent_index = index_map[top:get_parent()],
+        local exported_vars = top.class:get_exported_vars()
+        
+        local node_info = {
+            properties = {},
         }
         
-        table.insert(node_list, d)
-        index_map[top] = #node_list
+        -- Non root nodes are given the path of their parent
+        -- Since we're traversing in preorder if we add children back
+        -- when instancing the children will still be in the same order
+        if top ~= root then
+            node_info.parent = top:get_parent():get_relative_path(root)
+        end
         
-        local children = top:get_children()
-        for i = #children, 1, -1 do
-            local c = children[i]
+        -- Cases:
+        --   Node is root node of instanced scene
+        --   Node is part of inherited scene
+        --   Normal node
+        
+        if instanced then
+            node_info.filepath = top:get_filepath()
+        elseif not inherited then
+            node_info.class = top.class
+        else
+            node_info.path = top:get_relative_path(root)
+        end
+    
+        --   If node is instanced or inherited, only save properties that were modified from the default
+        if instanced or inherited then
+        
+            local base
+            if instanced then
+                base = instance_defaults[top:get_filepath()]
+            else
+                local owner = top:get_owner()        
+                base = instance_defaults[owner:get_filepath()]:get_node( top:get_relative_path(owner) )                 
+            end
+            
+            for name in pairs(exported_vars) do
+                local getter = ("get_%s"):format(name)
+                local v = top[getter](top)
+                local bv = base[getter](base)
+                
+                if v ~= bv then
+                    node_info.properties[name] = v
+                end
+            end
+        else -- Otherwise save properties that differ from class defaults
+            for name, ep in pairs(exported_vars) do
+                local getter = ("get_%s"):format(name)
+                local v = top[getter](top)
+                if v ~= ep.default then
+                    node_info.properties[name] = v
+                end
+            end
+        end
+        
+        table.insert(node_list, node_info)
+        
+        -- Include children only if owner is root node
+        for _,c in ipairs(top:get_children()) do
             if c:get_owner() == root then
                 table.insert(stack, c)
             end
-        end            
+        end
+        
+        ::CONTINUE::
     end
     
     self.data = binser.serialize(node_list)

@@ -6,8 +6,6 @@ local Node2d = require("class.engine.Node2d")
 local Camera = Node2d:subclass("Camera")
 Camera.static.icon = IconFont and IconFont.CAMERA
 
-Camera:binser_register()
-
 local function generate_samples(shake, n)
     local count = math.min(n, shake.sample_max - #shake.sample_cur)
 

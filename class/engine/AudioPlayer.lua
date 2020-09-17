@@ -10,8 +10,6 @@ AudioPlayer:export_var("autoplay", "bool")
 AudioPlayer:export_var("volume", "float")
 AudioPlayer:export_var("loop", "bool")
 
-AudioPlayer:binser_register()
-
 function AudioPlayer:initialize()
     Node2d.initialize(self)
     self.source = nil

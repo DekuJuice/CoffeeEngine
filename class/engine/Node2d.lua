@@ -6,9 +6,7 @@ local intersect = require("enginelib.intersect")
 local Node = require("class.engine.Node")
 local Node2d = Node:subclass("Node2d")
 
-Node2d:export_var("position", "vec2_int", {speed = 0.2, min = -math.huge, max = math.huge})
-
-Node2d:binser_register()
+Node2d:export_var("position", "vec2_int", {speed = 0.2, min = -math.huge, max = math.huge, default = vec2.zero})
 
 function Node2d:initialize()
     Node.initialize(self)

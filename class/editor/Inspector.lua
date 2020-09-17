@@ -33,8 +33,12 @@ local function get_hint_value(obj, name, hints, default)
     return h    
 end
 
-function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
-    local filter = editor_hints.filter
+local function sort_connection_comp(a, b)
+    return a.target:get_absolute_path() < b.target:get_absolute_path()
+end
+
+function Inspector:_draw_edit_widget(obj, ptype, export_hints, old_val)
+    local filter = export_hints.filter
     
     local changed = false
     local finalized = false
@@ -43,7 +47,7 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
     
     if ptype == "string" then
         imgui.PushItemWidth(-1)
-        local max_len = get_hint_value(obj, "max_len", editor_hints, 64)
+        local max_len = get_hint_value(obj, "max_len", export_hints, 64)
         
         changed, new_val = imgui.InputText("##StringInput", old_val, max_len)
         finalized = imgui.IsItemDeactivatedAfterEdit()
@@ -52,9 +56,9 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
     elseif ptype == "float" then
     
         local velo, smin, smax = 
-            get_hint_value(obj, "speed", editor_hints, 0.01),
-            get_hint_value(obj, "min", editor_hints, -math.huge),
-            get_hint_value(obj, "max", editor_hints, math.huge)        
+            get_hint_value(obj, "speed", export_hints, 0.01),
+            get_hint_value(obj, "min", export_hints, -math.huge),
+            get_hint_value(obj, "max", export_hints, math.huge)        
         
         imgui.PushItemWidth(-1)
         changed, new_val = imgui.DragFloat("##FloatSlider", old_val, velo, smin, smax)
@@ -62,9 +66,9 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
         merge_mode = "merge_ends"
     elseif ptype == "int" then
         local velo, smin, smax =
-            get_hint_value(obj, "speed", editor_hints, 0.01),
-            get_hint_value(obj, "min", editor_hints, -math.huge),
-            get_hint_value(obj, "max", editor_hints, math.huge)     
+            get_hint_value(obj, "speed", export_hints, 0.01),
+            get_hint_value(obj, "min", export_hints, -math.huge),
+            get_hint_value(obj, "max", export_hints, math.huge)     
         
         imgui.PushItemWidth(-1)
         changed, new_val = imgui.DragInt("##IntSlider", old_val, velo, smin, smax)
@@ -72,9 +76,9 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
         merge_mode = "merge_ends"
     elseif ptype:find("vec2") == 1 then
         local velo, smin, smax = 
-            get_hint_value(obj, "speed", editor_hints, 0.01),
-            get_hint_value(obj, "min", editor_hints, -math.huge),
-            get_hint_value(obj, "max", editor_hints, math.huge)  
+            get_hint_value(obj, "speed", export_hints, 0.01),
+            get_hint_value(obj, "min", export_hints, -math.huge),
+            get_hint_value(obj, "max", export_hints, math.huge)  
         
         imgui.PushItemWidth(-1)
         
@@ -105,7 +109,7 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
     elseif ptype == "bitmask" then
 
         if imgui.CollapsingHeader("Bitmask") then
-            local bits = editor_hints.bits or 31
+            local bits = export_hints.bits or 31
             for i = 1, bits do
                 local b = 2^(i - 1)
                 local checked = bit.band(b, old_val) == b
@@ -116,8 +120,8 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
             end
         end
     elseif ptype == "array" then
-        assert(editor_hints.array_type ~= nil, ("A type for the array contents must be specified (%s, %s)"):format(tostring(obj), ptype))
-        assert(editor_hints.init_value ~= nil, ("An init value must be specified (%s, %s)"):format(tostring(obj), ptype))
+        assert(export_hints.array_type ~= nil, ("A type for the array contents must be specified (%s, %s)"):format(tostring(obj), ptype))
+        assert(export_hints.init_value ~= nil, ("An init value must be specified (%s, %s)"):format(tostring(obj), ptype))
         
         if imgui.CollapsingHeader("Array") then
             local cx = imgui.GetCursorPosX()
@@ -141,7 +145,7 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
             
             if imgui.Button(IconFont.PLUS) then
                 new_val = table.copy(old_val)
-                table.insert(new_val, editor_hints.init_value)
+                table.insert(new_val, export_hints.init_value)
                 changed = true
                 finalized = true
             end
@@ -149,7 +153,7 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
             for i,aval in ipairs(new_val) do
                 imgui.PushID(("%d"):format(i))
                 local naval, achanged, afinalized, amerge_mode 
-                    = self:_draw_edit_widget(obj, editor_hints.array_type, editor_hints, aval )
+                    = self:_draw_edit_widget(obj, export_hints.array_type, export_hints, aval )
                 
                 if achanged then
                     new_val = table.copy(old_val)
@@ -165,10 +169,10 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
         end
 
     elseif ptype == "resource" then
-        assert(editor_hints.resource_type ~= nil, ("A resource type must be specified (%s, %s)"):format(tostring(obj), ptype))
+        assert(export_hints.resource_type ~= nil, ("A resource type must be specified (%s, %s)"):format(tostring(obj), ptype))
         
         if imgui.Button("Select") then
-            self.select_resource_modal:open(  editor_hints.resource_type.static.extensions )
+            self.select_resource_modal:open(  export_hints.resource_type.static.extensions )
         end
         
         local r, fin = self.select_resource_modal:draw()
@@ -190,12 +194,9 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
     elseif ptype == "enum" then
         imgui.PushItemWidth(-1)
         
-        local enums = get_hint_value(obj, "enum", editor_hints, {})
-        
-        
-        
+        local enums = get_hint_value(obj, "enum", export_hints, {})
         if imgui.BeginCombo("##enum", tostring(old_val)) then
-            if get_hint_value(obj, "include_nil", editor_hints, false) then
+            if get_hint_value(obj, "include_nil", export_hints, false) then
                 if imgui.Selectable("nil", old_val == nil) and old_val ~= nil then
                     new_val = nil
                     changed = true
@@ -220,7 +221,7 @@ function Inspector:_draw_edit_widget(obj, ptype, editor_hints, old_val)
     if finalized then
         merge_mode = nil
     end
-
+    
     return new_val, changed, finalized, merge_mode
 end
 
@@ -235,9 +236,9 @@ function Inspector:_draw_property_widget(obj, ep)
     end
 
     local name = ep.name
-    local editor_hints = ep.editor_hints
-    local display_name = editor_hints.display_name or name
-    local filter = editor_hints.filter
+    local export_hints = ep.export_hints
+    local display_name = export_hints.display_name or name
+    local filter = export_hints.filter
 
     local getter = ("get_%s"):format(name)
     local setter = ("set_%s"):format(name)
@@ -249,15 +250,15 @@ function Inspector:_draw_property_widget(obj, ep)
     imgui.Text(display_name)
     imgui.TableSetColumnIndex(1)
     
-    local new_val, changed, finalized, merge_mode = self:_draw_edit_widget(obj, ptype, editor_hints, val)
+    local new_val, changed, finalized, merge_mode = self:_draw_edit_widget(obj, ptype, export_hints, val)
         
     imgui.PopID()
-
+    
     if filter and not (filter(obj, new_val))  then
         new_val = val
     end
     
-    if new_val ~= val or finalized then
+    if changed or finalized then
         if is_node then
             
             local editor = self:get_parent()
@@ -278,6 +279,7 @@ function Inspector:_draw_node_inspector()
     local node = self.inspected_object
     local editor = self:get_parent()
     local model = editor:get_active_scene_model()
+    local tree = model:get_tree()
 
     imgui.Text( ("%s: %s"):format(node.class.name, node:get_name()))
     imgui.Text( ("Path: %s"):format(node:get_absolute_path()))
@@ -331,8 +333,74 @@ function Inspector:_draw_node_inspector()
         end
         table.sort(signals)
         
-        for _, name in ipairs(signals) do
-            imgui.Text(name)
+        
+        if imgui.BeginTable("##SignalTable", 2, {"ImGuiTableFlags_RowBg"}) then
+
+            local tree_flags = {"ImGuiTreeNodeFlags_DefaultOpen"}
+            for _, name in ipairs(signals) do
+                local connections = node:get_connections(name)
+                table.sort(connections, sort_connection_comp)
+                
+                imgui.TableNextRow()
+                imgui.TableSetColumnIndex(1)
+                if imgui.Button(IconFont.TRASH) then
+                    local cmd = model:create_command("Disconnect all signals")
+                    
+                    cmd:add_do_func(function()
+                            node:disconnect_all()
+                        end)
+                        
+                    cmd:add_undo_func(function()
+                            for _,c in ipairs(connections) do
+                                node:connect(name, c.target, c.method)
+                            end
+                        end)
+                    model:commit_command(cmd)
+                end
+                imgui.SameLine()
+                imgui.Button(IconFont.PLUS)
+
+                imgui.TableSetColumnIndex(0)
+                if imgui.TreeNodeEx(name, tree_flags) then
+                    
+                    for _, c in ipairs(connections) do
+                        if c.target:get_tree() == tree then
+                            imgui.TableNextRow()
+                            imgui.TableSetColumnIndex(0)
+                            
+                            imgui.Text(("%s : %s"):format(c.target:get_name(), c.method))
+                            if imgui.IsItemHovered() then
+                                imgui.BeginTooltip()
+                                imgui.Text(c.target:get_relative_path(node))
+                                imgui.EndTooltip()
+                            end
+                            
+                            imgui.TableSetColumnIndex(1)
+                            
+                            if imgui.Button(IconFont.TRASH) then
+                                local cmd = model:create_command("Disconnect signal")
+                                local target = c.target
+                                local method = c.method
+                                local n = name
+                                cmd:add_do_func(function()
+                                    node:disconnect(n, target, method )
+                                end)
+                                
+                                cmd:add_undo_func(function()
+                                    node:connect(n, target, method)
+                                end)
+                                
+                                model:commit_command(cmd)
+                            end
+                        end
+                    end
+                    
+                    
+                    imgui.TreePop()    
+                end
+                
+            end
+            imgui.EndTable()
         end
         
         

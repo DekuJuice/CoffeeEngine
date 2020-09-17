@@ -49,7 +49,6 @@ local class = require("enginelib.middleclass")
 local Obstacle = require("class.engine.Obstacle")
 local Actor = require("class.engine.Actor")
 local Player = Actor:subclass("Player")
-Player:binser_register()
 
 -- Player movement states:
 -- standing

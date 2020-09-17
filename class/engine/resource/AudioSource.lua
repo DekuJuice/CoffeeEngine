@@ -4,8 +4,6 @@ local ImportedResource = require("class.engine.resource.ImportedResource")
 local AudioSource = ImportedResource:subclass("AudioSource")
 AudioSource.static.extensions = {"ogg", "wav", "mp3"}
 
-AudioSource:binser_register()
-
 function AudioSource:initialize()
     ImportedResource.initialize(self)
 end

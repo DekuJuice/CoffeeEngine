@@ -111,7 +111,7 @@ function NodeTreeView:draw()
                     if imgui.BeginPopupContextItem("NodeContextMenu") then
                         model:set_selected_nodes({top})
                         
-                        if top:get_parent() then
+                        if top ~= root then
                         
                             editor:_menu_item("Move Node Up")
                             editor:_menu_item("Move Node Down")

@@ -4,6 +4,12 @@ local binser = require("enginelib.binser")
 local middleclass = require("enginelib.middleclass")
 local Object = middleclass("Object")
 
+binser.registerResource(Object, "Object")
+
+function Object.static.subclassed(self, other)
+    binser.registerResource(other, ("Class%s"):format(other.name))
+end
+
 --- Create generic getters/setters for the given property.
 -- Don't forget to actually initialize these properties when creating the object
 -- @param class
@@ -29,9 +35,13 @@ end
 -- @param datatype Datatypes can be anything, see ObjectInspector to see how different types are handled.
 -- In particular, data indicates a custom editor is needed and the property will not be shown in 
 -- the object inspector
--- @param editor_hints A table containing various hints to how the editing widget should be displayed.
+-- @param [opt] export_hints A table containing various hints on the constraints of the property as well as 
+-- how they should be displayed by editing widgets.
 -- These vary depending on the datatype, check _draw_property_widget in class/editor/Editor.lua for more details 
-Object.static.export_var = function(class, name, datatype, editor_hints)
+
+-- @table export_hints
+-- @field [opt] default The default value of the variable
+Object.static.export_var = function(class, name, datatype, export_hints)
     
     assert(name ~= nil, "A name must be given!")
     assert(datatype ~= nil, "A datatype must be specified!")
@@ -44,9 +54,11 @@ Object.static.export_var = function(class, name, datatype, editor_hints)
     table.insert(class.static.exported_vars, 
         {type = datatype, 
         name = name, 
-        editor_hints = editor_hints or {}})
+        export_hints = export_hints or {}})
 end
 
+--- Returns a table of exported variables
+-- @param class
 Object.static.get_exported_vars = function(class)
     local evars = {}
     while class do
@@ -64,24 +76,8 @@ Object.static.get_exported_vars = function(class)
     return evars
 end
 
-Object.static.binser_register = function(class)
-    if not rawget(class.static, "_deserialize") then
-        class.static._deserialize = function(data)
-            local instance = class()
-            for _,v in ipairs(data) do
-                local key = v[1]
-                local val = v[2]
-                
-                local setter = ("set_%s"):format(key)
-                instance[setter](instance, val)
-            end
-            return instance
-        end
-    end
-    
-    binser.register(class.__instanceDict, class.name, class._serialize, class._deserialize)
-end
-
+--- Returns a set of signals defined for the class
+-- @param class
 Object.static.get_signals = function(class)
     local signals = {}
     while class do
@@ -97,32 +93,6 @@ Object.static.get_signals = function(class)
     return signals
 end
 
-
--- serialization saves all altered variables into a key-value table
-function Object:_serialize()
-    local res = {}
-    local cur_class = self.class
-    while (cur_class) do
-        local static = rawget(cur_class, "static")
-        if static then
-            local exported = rawget(static, "exported_vars")
-            
-            if exported then
-                for _, ep in ipairs(exported) do
-                    local getter = ("get_%s"):format(ep.name)
-                    local val = self[getter](self)
-                    if val ~= ep.default then
-                        table.insert(res, {ep.name, self[getter](self)})
-                    end
-                end
-            end
-        end        
-        
-        cur_class = cur_class.super
-    end
-    return res
-end
-
 local weak_mt = {__mode = "k"}
 function Object:initialize()
 
@@ -135,10 +105,9 @@ function Object:initialize()
 end
 
 --- Connect a signal to a slot (method)
--- signal (string) is the name of the signal
--- target (Object) is the object to connect to
--- method (string) is the name of the method in the target object
--- returns: nothing
+-- @param signal The name of the signal
+-- @param target The object to notify when the signal is emitted
+-- @method The name of the method in the target object to call
 function Object:connect(signal, target, method)
     assert(self.signals[signal], ("Invalid signal %s"):format(signal))
     assert(not self:is_connected(signal, target, method), "Signal is already connected")
@@ -156,10 +125,10 @@ function Object:connect(signal, target, method)
     table.insert( target.connections, {subject = self, signal = signal, method = method} )
 end
 
--- Disconnect a signal
--- signal (string) is the name of the signal
--- target (Object) is the object connected
--- method (string) is the name of the method in the target object
+--- Disconnect a signal
+-- @param signal The name of the signal
+-- @param target The object to notify when the signal is emitted
+-- @method The name of the method in the target object to call
 function Object:disconnect(signal, target, method)
     assert(self.signals[signal], ("Invalid signal %s"):format(signal))
     assert(type(target[method]) == "function", ("Invalid method %s"):format(tostring(method)))    
@@ -169,11 +138,11 @@ function Object:disconnect(signal, target, method)
     target:_remove_connection(signal, self, method)
 end
 
--- Signals should be disconnected when an object is to be destroyed
+-- Disconnects all signals
 function Object:disconnect_all()
     for name, signals in pairs(self.signals) do
         for target, methods in pairs(signals) do
-            for method in pairs(signals) do
+            for method in pairs(methods) do
                 target:_remove_connection(name, self, method)
             end
             signals[target] = nil
@@ -182,12 +151,33 @@ function Object:disconnect_all()
     
 end
 
+--- Checks if a given signal is connected
+-- @param signal The name of the signal
+-- @param target The object to notify when the signal is emitted
+-- @method The name of the method in the target object to call
 function Object:is_connected(signal, target, method)
     assert(self.signals[signal], ("Invalid signal %s"):format(signal))    
     return self.signals[signal][target] and self.signals[signal][target][method]
 end
 
+--- Returns a list of connected objects and methods for the given signal
+-- @param signal the name of the signal
+function Object:get_connections(signal)
+    assert(self.signals[signal], ("Invalid signal %s"):format(signal))
+    
+    local list = {}
+    for target, methods in pairs(self.signals[signal]) do
+        for method in pairs(methods) do
+            table.insert(list, { target = target, method = method })
+        end
+    end
+    return list
+end
+
+--- Emits a signal
 -- No gurantees are made about the order signals are called in
+-- @param signal The name of the signal
+-- @param ... Arguments to pass to the signaled methods
 function Object:emit_signal(signal, ...)
     assert(self.signals[signal], ("Invalid signal %s"):format(signal))
 
@@ -198,7 +188,7 @@ function Object:emit_signal(signal, ...)
     end
 end
 
--- Internal helper for disconnecting signals
+--- Internal helper for disconnecting signals
 function Object:_remove_connection(signal, subject, method)
     local s = self.connections[method][subject]
     s[signal] = nil    

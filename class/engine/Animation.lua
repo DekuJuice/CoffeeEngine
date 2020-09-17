@@ -1,37 +1,241 @@
--- TODO: Asserts and error checking on everything
+local TRACK_TYPE_INDEX = 1
+local TRACK_NODE_PATH_INDEX = 2
+local TRACK_KEYFRAME_INDEX = 3
+local TRACK_PROPERTY_OFFSET = 3
 
-local Object = require("class.engine.Object")
-local Animation = Object:subclass("Animation")
+local KEYFRAME_TIME_INDEX = 1
+local KEYFRAME_DATA_OFFSET = 1
 
-Animation:export_var("name", "string")
-Animation:export_var("loop", "boolean")
-Animation:export_var("length", "float")
-Animation:export_var("tracks", "data")
+local VAR_PROPERTY_INDEX = 1
+local VAR_UPDATE_DISCRETE_INDEX = 2
+local VAR_WRAP_CLAMP_INDEX = 3
 
-Animation:binser_register()
+local VAR_KEY_VALUE_INDEX = 1
+local VAR_KEY_LERP_INDEX = 1
+
+local FUNC_KEY_NAME_INDEX = 1
+local FUNC_KEY_ARG_INDEX = 2
+
+local class = require("enginelib.middleclass")
+local binser = require("enginelib.binser")
+local Animation = class("Animation")
 
 function Animation:initialize()
-    Object.initialize(self)
     self.name = "Unnamed"
     self.loop = false
     self.length = 1.0
     self.tracks = {}
 end
 
+function Animation:_serialize()
+    return self.name, self.loop, self.length, self.tracks
+end
+
+function Animation.static.deserialize(name, loop, length, tracks)
+    local anim = Animation:allocate()
+    anim.name = name
+    anim.loop = loop
+    anim.length = length
+    anim.tracks = tracks
+    return anim
+end
+
+binser.registerClass(Animation)
+
+function Animation:set_name(name)
+    self.name = name
+end
+
+function Animation:get_name()
+    return self.name
+end
+
+function Animation:set_loop(loop)
+    self.loop = loop
+end
+
+function Animation:get_loop()
+    return self.loop
+end
+
+function Animation:set_length(length)
+    self.length = length
+end
+
+function Animation:get_length()
+    return self.length
+end
+
 function Animation:set_length(length)
     self.length = math.max(length, 0)
 end
 
-function Animation:add_function_track(path)
-    assert(path ~= nil, "A path must be specified")
+function Animation:add_track(type, node_path, ...)
+    type = type or ""
+    table.insert(self.tracks,
+        {
+            type,
+            node_path,
+            {},
+            ... -- additional properties
+        }
+    )
+end
 
-    local func_track = { 
-        type = "func", 
-        node_path = path,
-        keyframes = {}
+function Animation:remove_track(track_index)
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    table.remove(self.tracks, track_index)
+end
+
+function Animation:get_track_count()
+    return #self.tracks
+end
+
+function Animation:get_track_property(track_index, prop_index)
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    assert(prop_index <= #track - TRACK_PROPERTY_OFFSET, prop_index > 0, "Property index out of bounds")
+    
+    return track[prop_index + TRACK_PROPERTY_OFFSET]
+end
+
+function Animation:set_track_property(track_index, prop_index, val)
+    assert(val ~= nil, "Value cannot be nil")    
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    assert(prop_index <= #track - TRACK_PROPERTY_OFFSET, prop_index > 0, "Property index out of bounds")
+    
+    track[prop_index + TRACK_PROPERTY_OFFSET] = val
+end
+
+function Animation:get_track_type(track_index)    
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    return track[TRACK_TYPE_INDEX]
+end
+
+function Animation:get_track_node_path(track_index)
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    return track[TRACK_NODE_PATH_INDEX]
+end
+
+function Animation:set_track_node_path(track_index, node_path)
+    assert(node_path ~= nil, "Node path must not be nil")
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    track[TRACK_NODE_PATH_INDEX] = node_path
+end
+
+function Animation:add_keyframe(track_index, keyframe_time, ...)    
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    local keyframes = track[TRACK_KEYFRAME_INDEX]
+    
+    local new_kf = {
+        keyframe_time,
+        ... -- additional data
     }
     
-    table.insert(self.tracks, func_track)
+    if #keyframes == 0 then
+        table.insert(keyframes, new_kf)
+        return
+    end
+    
+    for i, kf in ipairs(keyframes) do
+        local time = kf[KEYFRAME_TIME_INDEX]
+        if time == keyframe_time then
+            keyframes[i] = new_kf
+            return
+        elseif time < keyframe_time then
+            table.insert(keyframes, i + 1, new_kf)
+            return
+        end
+    end
+
+    table.insert(keyframes, 1, new_kf)
+end
+
+function Animation:remove_keyframe(track_index, keyframe_index)    
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    local keyframes = track[TRACK_KEYFRAME_INDEX]
+    assert(keyframe_index <= #keyframes and keyframe_index > 0, "Keyframe index out of bounds")
+    
+    table.remove(keyframes, keyframe_index)
+end
+
+function Animation:set_keyframe_time(track_index, keyframe_index, new_time)
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    local keyframes = track[TRACK_KEYFRAME_INDEX]
+    assert(keyframe_index <= #keyframes and keyframe_index > 0, "Keyframe index out of bounds")
+    
+    local old = table.remove(keyframes, keyframe_index)
+    
+    self:add_keyframe(track_index, new_time, unpack(old, KEYFRAME_DATA_OFFSET + 1))
+end
+
+function Animation:set_keyframe_data(track_index, keyframe_index, data_index, val)    
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    local keyframes = track[TRACK_KEYFRAME_INDEX]
+    
+    assert(keyframe_index <= #keyframes and keyframe_index > 0, "Keyframe index out of bounds")
+    
+    local kf = keyframes[keyframe_index]    
+    assert(data_index <= #kf - KEYFRAME_DATA_OFFSET, data_index > 0, "Data index out of range")
+    
+    kf[data_index + KEYFRAME_DATA_OFFSET] = val    
+end
+
+function Animation:get_keyframe_data(track_index, keyframe_index, data_index)
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    local keyframes = track[TRACK_KEYFRAME_INDEX]
+    
+    assert(keyframe_index <= #keyframes and keyframe_index > 0, "Keyframe index out of bounds")
+    
+    local kf = keyframes[keyframe_index]
+    assert(data_index <= #kf - KEYFRAME_DATA_OFFSET, data_index > 0, "Data index out of range")    
+    
+    return kf[data_index + KEYFRAME_DATA_OFFSET]
+end
+
+function Animation:get_keyframe_time(track_index, keyframe_index)
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    local keyframes = track[TRACK_KEYFRAME_INDEX]
+    
+    assert(keyframe_index <= #keyframes and keyframe_index > 0, "Keyframe index out of bounds")
+    
+    return keyframes[keyframe_index][KEYFRAME_TIME_INDEX]
+end
+
+function Animation:get_keyframe_index(track_index, keyframe_time)
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    local keyframes = track[TRACK_KEYFRAME_INDEX]
+    
+    for i, kf in ipairs(keyframes) do
+        local time = kf[KEYFRAME_TIME_INDEX]
+        if time == keyframe_time then
+            return i
+        end
+    end
+end
+
+function Animation:get_keyframe_count(track_index)
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    local keyframes = track[TRACK_KEYFRAME_INDEX]
+    
+    return #keyframes
+end
+
+function Animation:add_function_track(path)
+    assert(path ~= nil, "A path must be specified")
+    self:add_track("func", path)
 end
 
 function Animation:add_variable_track(path, property, update_discrete, wrap_clamp)
@@ -41,121 +245,42 @@ function Animation:add_variable_track(path, property, update_discrete, wrap_clam
     if update_discrete == nil then update_discrete = false end
     if wrap_clamp == nil then wrap_clamp = false end
     
-    local var_track = {
-        type = "var",
-        node_path = path,
-        property = property,
-        update_discrete = update_discrete,
-        wrap_clamp = wrap_clamp,
-        keyframes = {}
-    }
+    self:add_track("var", path, property, update_discrete, wrap_clamp)
+end
+
+function Animation:function_track_add_key(track_index, time, func_name, args)
+    assert(self:get_track_type(track_index) == "func", "Track must be a function track")
+
+    args = args or {}
     
-    table.insert(self.tracks, var_track)
-end
-
-function Animation:get_track_count()
-    return #self.tracks
-end
-
-function Animation:track_get_type(index)
-    return self.tracks[index].type
-end
-
-function Animation:track_get_key_count(index)
-    return #self.tracks[index].keyframes
-end
-
-function Animation:track_get_key_time(track_index, key_index)
-    return self.tracks[track_index].keyframes[key_index].time
-end
-
--- return index of key if one exists, cannot have multiple keys at the same time
-function Animation:track_get_key_index(track_index, key_time)
-    for i , kf in ipairs(self.tracks[track_index].keyframes) do
-        if kf.time == key_time then
-            return i
-        end
-    end
-end
-
--- Will replace keys if they have the same time
-function Animation:track_set_key_time(track_index, key_index, new_time)
-    local old = table.remove(self.tracks[track_index].keyframes, key_index)
-    if self.tracks[track_index].type == "var" then
-        self:variable_track_add_key(track_index, new_time, old.value, old.lerp)
-    elseif self.tracks[track_index].type == "func" then
-        self:function_track_add_key(track_index, new_time, old.func_name, old.args)
-    end
-end
-
-function Animation:track_remove_key(track_index, key_index)
-    table.remove(self.tracks[track_index].keyframes, key_index)
-end
-
-function Animation:track_get_node_path(track_index)
-    return self.tracks[track_index].node_path
-end
-
-function Animation:remove_track(index)
-    table.remove(self.tracks, index)
-end
-
-function Animation:function_track_add_key(index, time, func_name, args)
-    assert(self:track_get_type(index) == "func", "Track must be a function track")
-    
-    local keyframes = self.tracks[index].keyframes
-
-    local new_kf = {
-        time = time,
-        func_name = func_name,
-        args = args or {}
-    }
-    
-    if #keyframes == 0 then
-        table.insert(keyframes, new_kf)
-        return
-    end
-    
-    for j, kf in ipairs(keyframes) do
-        if kf.time == time then
-            keyframes[j] = new_kf
-            return
-        elseif kf.time < time then
-            table.insert(keyframes, j + 1, new_kf)
-            return
-        end
-    end
-
-    table.insert(keyframes, 1, new_kf)
-end
-
-function Animation:function_track_set_key_function_name(track_index, key_index, func_name)
-end
-
-function Animation:function_track_set_key_function_arguments(track_index, key_index, arguments)
-
+    self:add_keyframe(track_index, time, func_name, args)
 end
 
 function Animation:function_track_get_key_indices(track_index, time_start, delta)
-    assert(self:track_get_type(track_index) == "func", "Track must be a function track")
+    assert(self:get_track_type(track_index) == "func", "Track must be a function track")
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    local keyframes = track[TRACK_KEYFRAME_INDEX]
     
-    local keyframes = self.tracks[track_index].keyframes
     local indices = {}
     local time_end = (time_start + delta) % self.length
     
     if time_end >= time_start then
         for i,kf in ipairs(keyframes) do
-            if kf.time >= time_start 
-            and kf.time <= self.length
-            and kf.time < time_end then
+            local time = kf[KEYFRAME_TIME_INDEX]
+            
+            if time >= time_start 
+            and time <= self.length
+            and time < time_end then
                 table.insert(indices, i)
             end
         end
     else
         for i,kf in ipairs(keyframes) do
-            if (kf.time >= time_start 
-            and kf.time <= self.length)
-            or kf.time < time_end then
+            local time = kf[KEYFRAME_TIME_INDEX]
+            if (time >= time_start 
+            and time <= self.length)
+            or time < time_end then
                 table.insert(indices, i)
             end
         end
@@ -164,83 +289,79 @@ function Animation:function_track_get_key_indices(track_index, time_start, delta
     return indices
 end
 
-function Animation:function_track_get_function_name(track_index, key_index)
-    return self.tracks[track_index].keyframes[key_index].func_name 
+function Animation:function_track_set_key_func_name(track_index, keyframe_index, func_name)
+    assert(self:get_track_type(track_index) == "func", "Track must be a function track")
+    self:set_keyframe_data(track_index, keyframe_index, FUNC_KEY_NAME_INDEX, func_name)
 end
 
-function Animation:function_track_get_function_arguments(track_index, key_index) 
-    return self.tracks[track_index].keyframes[key_index].args
+function Animation:function_track_get_key_func_name(track_index, keyframe_index)
+    assert(self:get_track_type(track_index) == "func", "Track must be a function track")
+    return self:get_keyframe_data(track_index, keyframe_index, FUNC_KEY_NAME_INDEX)
 end
 
-function Animation:variable_track_get_update_discrete(track_index)
-    return self.tracks[track_index].update_discrete
+function Animation:function_track_set_key_args(track_index, keyframe_index, args)
+    assert(self:get_track_type(track_index) == "func", "Track must be a function track")
+    self:set_keyframe_data(track_index, keyframe_index, FUNC_KEY_ARG_INDEX, args)
 end
 
-function Animation:variable_track_set_update_discrete(track_index, update_mode)
-    self.tracks[track_index].update_discrete = update_mode
+function Animation:function_track_get_key_args(track_index, keyframe_index)
+    assert(self:get_track_type(track_index) == "func", "Track must be a function track")
+    return self:get_keyframe_data(track_index, keyframe_index, FUNC_KEY_ARG_INDEX)
 end
 
-function Animation:variable_track_get_wrap_clamp(track_index)
-    return self.tracks[track_index].wrap_clamp
-end
-
-function Animation:variable_track_set_wrap_clamp(track_index, wrap_mode)
-    self.tracks[track_index].wrap_clamp = wrap_mode
-end
-
-function Animation:variable_track_add_key(index, time, value, lerp)
-    assert(self:track_get_type(index) == "var", "Track must be a variable track")
-    
-    local keyframes = self.tracks[index].keyframes
-    local new_kf = {
-        time = time,
-        value = value,
-        lerp = lerp
-    }
-    
-    if #keyframes == 0 then
-        table.insert(keyframes, new_kf)
-        return
-    end
-    
-    for j, kf in ipairs(keyframes) do
-        if kf.time == time then
-            keyframes[j] = new_kf
-            return
-        elseif time < kf.time then
-            table.insert(keyframes, j, new_kf)
-            return
-        end
-    end
-    
-    table.insert(keyframes, new_kf)
-    
-end
-
-function Animation:variable_track_get_value(track_index, key_index)
-    return self.tracks[track_index].keyframes[key_index].value
+function Animation:variable_track_add_key(track_index, time, value, lerp)
+    assert(self:get_track_type(track_index) == "var", "Track must be a variable track")
+    self:add_keyframe(track_index, time, value, lerp)
 end
 
 function Animation:variable_track_get_property(track_index)
-    return self.tracks[track_index].property
+    assert(self:get_track_type(track_index) == "var", "Track must be a variable track")    
+    return self:get_track_property(track_index, VAR_PROPERTY_INDEX)
 end
 
-function Animation:variable_track_get_lerp(track_index, key_index)
-    
+function Animation:variable_track_set_property(track_index, property)
+    assert(self:get_track_type(track_index) == "var", "Track must be a variable track")
+    self:set_track_property(track_index, VAR_PROPERTY_INDEX, property)
+end
+
+function Animation:variable_track_get_update_discrete(track_index)
+    assert(self:get_track_type(track_index) == "var", "Track must be a variable track")    
+    return self:get_track_property(track_index, VAR_UPDATE_DISCRETE_INDEX)
+end
+
+function Animation:variable_track_set_update_discrete(track_index, update_discrete)
+    assert(self:get_track_type(track_index) == "var", "Track must be a variable track")
+    self:set_track_property(track_index, VAR_UPDATE_DISCRETE_INDEX, update_discrete)
+end
+
+function Animation:variable_track_get_wrap_clamp(track_index)
+    assert(self:get_track_type(track_index) == "var", "Track must be a variable track")
+    return self:get_track_property(track_index, VAR_WRAP_CLAMP_INDEX)
+
+end
+
+function Animation:variable_track_set_wrap_clamp(track_index, wrap_clamp)
+    assert(self:get_track_type(track_index) == "var", "Track must be a variable track")
+    self:set_track_property(track_index, VAR_WRAP_CLAMP_INDEX, wrap_clamp)
 end
 
 function Animation:variable_track_get_previous_index(track_index, time)
-    local keyframes = self.tracks[track_index].keyframes
+    assert(self:get_track_type(track_index) == "var", "Track must be a variable track")
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    local keyframes = track[TRACK_KEYFRAME_INDEX]
     
     for i = #keyframes, 1, -1 do
-        if time >= keyframes[i].time then
+        if time >= keyframes[i][KEYFRAME_TIME_INDEX] then
             return i
         end
     end
     
-    if not self.tracks[track_index].wrap_clamp and #keyframes > 0 then
+    local wrap_clamp = track[TRACK_PROPERTY_OFFSET + VAR_WRAP_CLAMP_INDEX]
+    
+    if not wrap_clamp and #keyframes > 0 then
         for i = #keyframes, 1, -1 do
-            if keyframes[i].time <= self.length then
+            if keyframes[i][KEYFRAME_TIME_INDEX] <= self.length then
                 return i
             end
         end    
@@ -250,17 +371,42 @@ function Animation:variable_track_get_previous_index(track_index, time)
 end
 
 function Animation:variable_track_get_next_index(track_index, time)
-    local keyframes = self.tracks[track_index].keyframes
+    assert(self:get_track_type(track_index) == "var", "Track must be a variable track")
+    assert(track_index <= self:get_track_count() and track_index > 0, "Track index out of bounds")    
+    local track = self.tracks[track_index]
+    local keyframes = track[TRACK_KEYFRAME_INDEX]
 
     for i, keyframe in ipairs(keyframes) do
-        if keyframe.time > time then
+        if keyframe[KEYFRAME_TIME_INDEX] > time then
             return i
         end
     end
     
-    if not self.tracks[track_index].wrap_clamp and #keyframes > 0 then
+    local wrap_clamp = track[TRACK_PROPERTY_OFFSET + VAR_WRAP_CLAMP_INDEX]
+    
+    if not wrap_clamp and #keyframes > 0 then
         return 1
     end
+end
+
+function Animation:variable_track_get_key_value(track_index, keyframe_index)
+    assert(self:get_track_type(track_index) == "var", "Track must be a variable track")    
+    return self:get_keyframe_data(track_index, keyframe_index, VAR_KEY_VALUE_INDEX)
+end
+
+function Animation:variable_track_set_key_value(track_index, keyframe_index, value)
+    assert(self:get_track_type(track_index) == "var", "Track must be a variable track")    
+    self:set_keyframe_data(track_index, keyframe_index, VAR_KEY_VALUE_INDEX, value)
+end
+
+function Animation:variable_track_get_key_lerp(track_index, keyframe_index)
+    assert(self:get_track_type(track_index) == "var", "Track must be a variable track")    
+    return self:get_keyframe_data(track_index, keyframe_index, VAR_KEY_LERP_INDEX)
+end
+
+function Animation:variable_track_set_key_lerp(track_index, keyframe_index, lerp)
+    assert(self:get_track_type(track_index) == "var", "Track must be a variable track")    
+    self:set_keyframe_data(track_index, keyframe_index, VAR_KEY_LERP_INDEX, lerp)
 end
 
 return Animation

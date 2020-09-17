@@ -1,3 +1,5 @@
+local DEFAULT_TILE_SIZE = 16
+
 local Texture = require("class.engine.resource.Texture")
 local Resource = require("class.engine.resource.Resource")
 local Tileset = Resource:subclass("Tileset")
@@ -5,14 +7,12 @@ local Tileset = Resource:subclass("Tileset")
 Tileset.static.extensions = {"tset"}
 
 Tileset:export_var("texture", "resource", {resource_type=Texture})
-Tileset:export_var("tile_size", "int")
+Tileset:export_var("tile_size", "int", {default = DEFAULT_TILE_SIZE} )
 Tileset:export_var("tiles", "data")
-
-Tileset:binser_register()
 
 function Tileset:initialize()
     Resource.initialize(self)
-    self.tile_size = 16
+    self.tile_size = DEFAULT_TILE_SIZE
     self.tiles = {}
     self.quads = {}
 end

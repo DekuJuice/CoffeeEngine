@@ -8,7 +8,8 @@ Texture:export_var(
         enum = {
             "nearest",
             "linear"
-        }
+        },
+        default = "nearest"
     }
 )
 
@@ -19,7 +20,8 @@ Texture:export_var(
         enum = {
             "nearest",
             "linear"
-        }
+        },
+        default = "nearest"
     }
 )
 
@@ -32,7 +34,8 @@ Texture:export_var(
             "clampzero",
             "repeat",
             "mirroredrepeat"
-        }
+        },
+        default = "clamp"
     }
 )
 
@@ -45,12 +48,12 @@ Texture:export_var(
             "clampzero",
             "repeat",
             "mirroredrepeat"
-        }
+        },
+        default = "clamp"
     }
 )
 
 Texture.static.extensions = {"png", "jpg"}
-Texture:binser_register()
 
 function Texture:initialize()
     ImportedResource.initialize(self)

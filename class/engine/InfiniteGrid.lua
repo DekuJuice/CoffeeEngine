@@ -1,5 +1,6 @@
--- We say infinite, but for optimization purposes we only allow
--- chunks coordinates to range from 
+-- It says infinite, but for optimization purposes we only allow
+-- chunks coordinates to range from 0 to SIGMA. With a reasonable chunk
+-- length this should be more than enough for most purposes
 
 local CHUNK_LENGTH = 16
 local CHUNK_TOTAL = CHUNK_LENGTH ^ 2
@@ -7,14 +8,9 @@ local CHUNK_COUNTER = CHUNK_TOTAL + 1
 local SIGMA = 1e5
 local SIGMA_HALF = math.floor(SIGMA / 2)
 
-local Object = require("class.engine.Object")
-local InfiniteGrid = Object:subclass("InfiniteGrid")
-
-InfiniteGrid:export_var("chunks", "data")
-InfiniteGrid:export_var("chunk_index_map", "data")
-
-InfiniteGrid:define_get_set("autoremove_chunks")
-InfiniteGrid:binser_register()
+local class = require("enginelib.middleclass")
+local binser =require("enginelib.binser")
+local InfiniteGrid = class("InfiniteGrid")
 
 -- Map data is stored in 16x16 chunks,
 -- centered around the TileMap.
@@ -29,11 +25,20 @@ local function chunk_init()
 end
 
 function InfiniteGrid:initialize()
-    Object.initialize(self)
-    
     self.chunks = {}
     self.chunk_index_map = {}
     self.autoremove_chunks = true
+end
+
+function InfiniteGrid:_serialize()
+    return self.chunks, self.chunk_index_map
+end
+
+function InfiniteGrid.static._deserialize(chunks, chunk_index_map)
+    local ig = InfiniteGrid:allocate()
+    ig.chunks = chunks
+    ig.chunk_index_map = chunk_index_map    
+    return ig
 end
 
 function InfiniteGrid:get_chunk_length()
@@ -160,6 +165,14 @@ function InfiniteGrid:get_occupied_cells()
     end
 
     return cells
+end
+
+function InfiniteGrid:set_autoremove_chunks(autoremove) 
+    self.autoremove_chunks = autoremove
+end
+
+function InfiniteGrid:get_autoremove_chunks()
+    return self.autoremove_chunks
 end
 
 return InfiniteGrid

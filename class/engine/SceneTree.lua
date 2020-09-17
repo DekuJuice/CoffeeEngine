@@ -5,6 +5,7 @@ local Node = require("class.engine.Node")
 local Node2d = require("class.engine.Node2d")
 local Viewport = require("class.engine.Viewport")
 local PhysicsWorld = require("class.engine.PhysicsWorld")
+local PackedScene = require("class.engine.resource.PackedScene")
 
 local SceneTree = Object:subclass("SceneTree")
 SceneTree:define_get_set("scale_mode")
@@ -27,6 +28,19 @@ function SceneTree:initialize()
     self.root:_set_tree(self)
 end
 
+function SceneTree:create_autoload_scenes()
+    -- Create autoloads
+    for _, path in ipairs(settings.get_setting("autoload_scenes")) do
+        local as = resource.get_resource( path )
+        assert(as, ("Failed to get autoload %s"):format(path))
+        assert(as:isInstanceOf(PackedScene), ("Invalid autoload %s"):format(path) )
+        
+        local instance = as:instance()
+        
+        self.root:add_child( instance )
+    end
+end
+
 function SceneTree:get_physics_world()
     return self.physics_world
 end
@@ -40,7 +54,6 @@ function SceneTree:set_current_scene(scene)
     
     if self.current_scene then
         self.root:add_child(self.current_scene)
-        self.current_scene:set_owner(self.root)
     end    
 end
 

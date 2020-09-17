@@ -15,8 +15,6 @@ Area:export_var("aabb_offset", "vec2_int", {speed = 0.2, min = -math.huge, max =
 
 Area:define_get_set("collide_current")
 
-Area:binser_register()
-
 local _weak_mt = {__mode = "k"}
 
 function Area:initialize()

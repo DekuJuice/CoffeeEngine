@@ -26,8 +26,6 @@ TileMap:export_var("tileset", "resource", {resource_type = Tileset})
 TileMap:export_var("collision_enabled", "bool")
 TileMap:export_var("tile_size", "int", {min = 4, max = 1024})
 
-TileMap:binser_register()
-
 function TileMap:initialize()
     Collidable.initialize(self)
 

@@ -1,30 +1,25 @@
-local module = {}
-module.__index = module
+local class = require("enginelib.middleclass")
+local CircularBuffer = class("CircularBuffer")
 
-
-function module.new(length)
-    local self = {}
-    
+function CircularBuffer:initialize(length)
     self.items = {}
     self.oldest = 1
-    self.length = length
-    
-    return setmetatable(self, module)
+    self.length = length or 500
 end
 
-function module:get_length()
+function CircularBuffer:get_length()
     return self.length
 end
 
-function module:get_count()
+function CircularBuffer:get_count()
     return #self.items
 end
 
-function module:is_full()
+function CircularBuffer:is_full()
     return #self.items == self.length
 end
 
-function module:push(v)
+function CircularBuffer:push(v)
     if self:is_full() then
         self.items[self.oldest] = v
         self.oldest = (self.oldest % self.length) + 1    
@@ -35,7 +30,7 @@ end
 
 -- negative indices are oldest items
 -- positive indices are newest items
-function module:at(i)
+function CircularBuffer:at(i)
     local n = #self.items
     if i == 0 or math.abs(i) > n then
         return nil
@@ -48,4 +43,4 @@ function module:at(i)
     end
 end
 
-return module
+return CircularBuffer

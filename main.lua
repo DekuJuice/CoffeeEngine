@@ -44,7 +44,7 @@ end
 
 -- LIBRARIES
 input = require("input")
-local circularbuffer = require("enginelib.circularbuffer")
+local CircularBuffer = require("class.engine.CircularBuffer")
 local lily
 
 -- These 3 register themselves into the existing corresponding globals
@@ -61,7 +61,7 @@ bit = require("bit") -- Luajit bitop library
 -- Override print to store console output
 
 do
-    _G.CONSOLE_OUTPUT = circularbuffer.new(1000)
+    _G.CONSOLE_OUTPUT = CircularBuffer(1000)
 
     local old_print = print
     -- Output is stored in a circular buffer, _G.CONSOLE_BUFFER_TOP indicates the front
@@ -110,8 +110,8 @@ end
 
 -- CALLBACKS --
 
-local update_times = circularbuffer.new(180)
-local draw_times = circularbuffer.new(180)
+local update_times = CircularBuffer(180)
+local draw_times = CircularBuffer(180)
 
 function love.run()
     love.math.setRandomSeed(os.time())
@@ -293,13 +293,13 @@ function love.load(args, unfiltered_args)
     -- Init resource manager, this registers some global functions for 
     -- managing resources
     resource = require("res")
-
+    
+    preload_class("class/engine")
+    preload_class("class/game")
+    
     local SceneTree = require("class.engine.SceneTree")
 
     main = SceneTree()
-
-    preload_class("class/engine")
-    preload_class("class/game")
 
     -- If editor mode enabled, root is the editor
     if settings.get_setting("is_editor") then
@@ -318,13 +318,8 @@ function love.load(args, unfiltered_args)
             settings.get_setting("game_height")
         )
         
-        -- Create autoloads
-        for _, path in ipairs(settings.get_setting("autoload_scenes")) do
-            local as = resource.get_resource( path )
-            assert(as, ("Failed to get autoload %s"):format(path))
-            main:get_root():add_child( as:instance() )
-        end
-
+        main:create_autoload_scenes()
+        
         local mscene = resource.get_resource( settings.get_setting("main_scene") )
         assert(mscene ~= nil, "No main scene!")
         main:set_current_scene(mscene:instance())
