@@ -745,49 +745,83 @@ local function intersect_point_obstacle(p, ob)
     return true
 end
 
-function PhysicsWorld:query_point(p, mask, exclude)
-
+function PhysicsWorld:get_nearby(rmin, rmax, mask, include_actor, include_obstacle, include_area)
     local result = {}
     result._tiles = {}
-
+    
     assert(mask ~= nil, "A mask must be provided")
-
-    for _,actor in ipairs(self.actor_shash:get_nearby_in_rect(p.x, p.y, 0, 0)) do
-        if bit.band(actor:get_collision_layer(), mask) 
-        and (not exclude or not table.find(exclude, actor) )  then            
-            if intersect.point_aabb(p, actor:get_bounding_box()) then
+    
+    local dim = rmax - rmin
+    
+    if include_actor then
+        for _,actor in ipairs(self.actor_shash:get_nearby_in_rect(rmin.x, rmin.y, dim.x, dim.y)) do
+            if bit.band(actor:get_collision_layer(), mask) ~= 0 then
                 table.insert(result, actor)
-            end            
+            end
         end
     end
 
-    for _,obstacle in ipairs(self.obstacle_shash:get_nearby_in_rect(p.x, p.y, 0, 0)) do
-        if bit.band(obstacle:get_collision_layer(), mask) 
-        and (not exclude or not table.find(exclude, obstacle))
-        and intersect_point_obstacle(p, obstacle) then
-            table.insert(result, obstacle)
+    if include_obstacle then
+        for _,obstacle in ipairs(self.obstacle_shash:get_nearby_in_rect(rmin.x, rmin.y, dim.x, dim.y)) do
+            if bit.band(obstacle:get_collision_layer(), mask) ~= 0 then
+                table.insert(result, obstacle)
+            end
         end
-    end
-
-    for _, tilemap in ipairs(self.tilemaps) do
-        if (not exclude or not table.find(exclude, tilemap)) then
-
-            local o = tilemap:get_obstacle(tilemap:transform_to_map(p):unpack())
-
-            if o then
-                if bit.band(o:get_collision_layer(), mask)
-                and intersect_point_obstacle(p, o) then
+        
+        for _, tilemap in ipairs(self.tilemaps) do
+        
+            if bit.band(tilemap:get_collision_layer(), mask) ~= 0 then
+                local obs = tilemap:get_obstacles_in_rect( tilemap:transform_to_map( rmin ), tilemap:transform_to_map( rmax ))
+                for _, o in ipairs(obs) do
                     table.insert(result, o)
                     table.insert(result._tiles, o)
-                else
-                    TileMap.pool_push_obstacle(o)
-                end        
+                end
             end
+        end
+        
+    end
 
+    if include_area then
+        for _,area in ipairs(self.area_shash:get_nearby_in_rect(rmin.x, rmin.y, dim.x, dim.y)) do
+            if bit.band(area:get_collision_layer(), mask) ~= 0 then
+                table.insert(result, area)
+            end
         end
     end
 
     return result
+end
+
+function PhysicsWorld:query_point(p, mask, include_actor, include_obstacle, include_area)
+
+    local nearby = self:get_nearby(p, p, mask, include_actor, include_obstacle, include_area)
+    
+    -- Filter anything that isn't actually intersecting
+    for i = #nearby, 1, -1 do
+        local o = nearby[i]
+        local omin, omax = o:get_bounding_box()
+        
+        if not intersect.point_aabb(p, omin, omax) then goto REMOVE end
+        
+        if o:isInstanceOf(Obstacle) then
+            local hm = o:get_heightmap()
+            if #hm == 0 then goto CONTINUE end
+            
+            local h = o:get_height(p.x - omin.x)
+            if (o:get_flip_v() and p.y < (omin.y + h))
+            or (not o:get_flip_v() and p.y > (omax.y - h)) then
+                goto CONTINUE
+            end            
+        end
+        
+        ::REMOVE::
+        
+        table.remove(nearby, i)
+        
+        ::CONTINUE::
+    end
+    
+    return nearby
 end
 
 function PhysicsWorld:query_aabb(rmin, rmax, mask)

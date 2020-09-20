@@ -25,17 +25,18 @@ function PackedScene:instance()
     
     for i = 2, #node_list do
         local info = node_list[i]
-        local node
         if info.class then
-            node = info.class()
+            info.node = info.class()
         elseif info.filepath then
-            node = resource.get_resource(info.filepath):instance()
+            info.node = resource.get_resource(info.filepath):instance()
         else
-            node = root:get_node(info.path)
-            if not node then
-                log.warn("Missing node, inherited scene was changed?")
-                goto CONTINUE
-            end
+            info.node = root:get_node(info.path)            
+        end
+        
+        local node = info.node
+        if not node then
+            log.warn("Missing node, inherited scene was changed?")
+            goto CONTINUE
         end
         
         for k,v in pairs(info.properties) do
@@ -49,6 +50,15 @@ function PackedScene:instance()
         node:set_owner(root)
         
         ::CONTINUE::
+    end
+    
+    -- Do second pass to connect signals
+    for _, info in ipairs(node_list) do
+        local node = info.node
+        for _,connection in ipairs(info.signals) do
+            node:connect(connection.signal, root:get_node(connection.target_path), connection.method)
+        end
+        
     end
     
     root:set_filepath( self:get_filepath() )
@@ -67,6 +77,8 @@ function PackedScene:pack(root)
     
     local instance_defaults = {}
     local node_list = {}
+    
+    -- Serialize nodes
     local stack = { root }
     while #stack > 0 do
         local top = table.remove(stack)
@@ -86,8 +98,27 @@ function PackedScene:pack(root)
         
         local node_info = {
             properties = {},
+            signals = {}
         }
         
+        -- Create list of outgoing signals
+        -- Signals pointing to things outside the tree are discarded
+        for signal in pairs(top.class:get_signals()) do
+            for _, connection in ipairs(top:get_connections(signal)) do
+            
+                if connection.target:get_tree() == top:get_tree() then
+                    
+                    table.insert(node_info.signals, {
+                        signal = signal,
+                        target_path = connection.target:get_relative_path(root),
+                        method = connection.method
+                    })
+
+                end
+
+            end
+        end
+
         -- Non root nodes are given the path of their parent
         -- Since we're traversing in preorder if we add children back
         -- when instancing the children will still be in the same order
@@ -149,6 +180,9 @@ function PackedScene:pack(root)
         
         ::CONTINUE::
     end
+    
+    -- Do second pass for 
+    
     
     self.data = binser.serialize(node_list)
 end

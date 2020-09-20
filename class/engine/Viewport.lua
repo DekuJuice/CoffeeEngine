@@ -62,7 +62,7 @@ end
 
 -- Returns bounds in world coordinates
 function Viewport:get_bounds()
-
+    return self:transform_to_world(vec2.zero), self:transform_to_world(vec2( self.canvas:getDimensions() ) )
 end
 
 return Viewport

@@ -105,6 +105,7 @@ function TileMap:get_obstacle(x, y)
     placehold:set_heightmap(TilePlaceholder.static.empty_heightmap)
     placehold:set_flip_h(flip_h)
     placehold:set_flip_v(flip_v)
+    placehold:set_collision_layer(self.collision_layer)
     if tile.heightmap_enabled then
         placehold:set_heightmap(tile.heightmap)
     end

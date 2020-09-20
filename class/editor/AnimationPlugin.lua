@@ -48,11 +48,14 @@ function AnimationPlugin:initialize()
     self.keyframe_drag = false
     self.keyframe_drag_time = 0
     
+    self.rename_animation_modal_open = false
+    
     self.new_track_modal_open = false
     self.new_track_modal_type = "Variable"
     self.new_track_modal_path = ""
     self.new_track_modal_selected_node = nil
     self.new_track_modal_selected_property = nil
+    self.func_track_popup_open = false
 end
 
 function AnimationPlugin:enter_tree()
@@ -81,7 +84,7 @@ function AnimationPlugin:enter_tree()
     ap:add_child(n3)
     n3:set_owner(n2)
     
-    ap:connect("animation_finished", n3, "flag_position_dirty")
+    ap:connect("animation_looped", n3, "print_tree")
 
     scene:set_selected_nodes({ap})
 
@@ -337,10 +340,51 @@ function AnimationPlugin:_draw_new_track_modal()
     end
 end
 
-function AnimationPlugin:_open_func_track_keyframe_modal()
-end
-
-function AnimationPlugin:_draw_func_track_keyframe_modal()
+function AnimationPlugin:_draw_rename_animation_modal()
+    local animp = self.selected_animation_player
+    local anim = animp:get_animation(self.selected_animation)
+    local editor = self:get_parent()
+    local model = editor:get_active_scene_model()
+    
+    if self.rename_animation_modal_open then
+        imgui.OpenPopup("Rename Animation")
+    end
+    
+    local window_flags = {"ImGuiWindowFlags_AlwaysAutoResize"}
+    local should_draw, window_open = imgui.BeginPopupModal("Rename Animation", self.rename_animation_modal_open, window_flags)
+    
+    if should_draw then
+        
+        local changed, new_name = imgui.InputText("##Rename", anim:get_name(), 128, {"ImGuiInputTextFlags_EnterReturnsTrue"})
+        if imgui.IsItemDeactivatedAfterEdit() then
+            local cmd = model:create_command("Rename animation")
+            local old_name = anim:get_name()
+            cmd:add_do_func(function()
+                animp:remove_animation(old_name)
+                anim:set_name(new_name)
+                animp:add_animation(anim)
+                self.selected_animation = new_name
+            end)
+            
+            cmd:add_undo_func(function()
+                animp:remove_animation(new_name)
+                anim:set_name(old_name)
+                animp:add_animation(anim)
+                self.selected_animation = old_name
+            end)
+            
+            model:commit_command(cmd)
+            imgui.CloseCurrentPopup()
+            self.rename_animation_modal_open = false
+        end
+        
+        if imgui.Button("Cancel", 120, 0) 
+        or imgui.IsKeyPressed(imgui.GetKeyIndex("ImGuiKey_Escape")) then
+            imgui.CloseCurrentPopup()
+            self.rename_animation_modal_open = false
+        end
+        imgui.EndPopup()
+    end    
 end
 
 function AnimationPlugin:draw()
@@ -398,7 +442,12 @@ function AnimationPlugin:draw()
                     model:commit_command(cmd)
                 end
 
-                imgui.MenuItem("Rename")
+                if imgui.MenuItem("Rename") then
+                    if animp:get_animation(self.selected_animation) then
+                        self.rename_animation_modal_open = true
+                    end
+                end
+                
                 if imgui.MenuItem("Delete") then
                     local to_rem = animp:get_animation(self.selected_animation)
                     if to_rem then
@@ -431,8 +480,6 @@ function AnimationPlugin:draw()
                     end
                 end
 
-                imgui.Separator()
-                imgui.MenuItem("Clean Keyframes")
                 imgui.EndMenu()
             end
             imgui.PushItemWidth(-144)            
@@ -448,6 +495,9 @@ function AnimationPlugin:draw()
             end
             imgui.EndMenuBar()
         end
+
+        self:_draw_rename_animation_modal()
+
 
         local animation = animp:get_animation(self.selected_animation)
 
@@ -519,7 +569,7 @@ function AnimationPlugin:draw()
             if self.selected_track <= animation:get_track_count() then
                 local tt = animation:get_track_type(self.selected_track)
                 if tt == "func" then
-                    self:_open_func_track_keyframe_modal()
+                    self.func_track_popup_open = true
                 elseif tt == "var" then
                     
                     local ti = self.selected_track
@@ -540,7 +590,7 @@ function AnimationPlugin:draw()
                         local old_i = animation:get_keyframe_index(ti, t)
                         if old_i then
                             local old_v = animation:variable_track_get_key_value(ti, old_i)
-                            local old_lerp = animation:variable_track_get_lerp(ti, old_i)
+                            local old_lerp = animation:variable_track_get_key_lerp(ti, old_i)
                             
                             cmd:add_undo_func(function()
                                 animation:variable_track_add_key(ti, t, old_v, old_lerp)
@@ -561,6 +611,76 @@ function AnimationPlugin:draw()
                 
             end        
         end
+        
+        if self.func_track_popup_open then
+            imgui.OpenPopup("funckeyframe")
+            self.func_track_popup_open = false
+        end
+        
+        if imgui.BeginPopup("funckeyframe") then
+            imgui.CaptureKeyboardFromApp(true)
+            local close_popup = false
+            if imgui.BeginCombo("Method##Funckey", tostring(self.selected_method)) then
+                local anim_target =  animp:get_node( animation:get_track_node_path(self.selected_track) )
+                
+                if anim_target then
+                    local method_arr = {}
+                    local class = anim_target.class
+                    while class do
+                        for k,v in pairs(rawget(class, "__declaredMethods")) do
+                            if k[1] ~= "_" then
+                                table.insert(method_arr, k)
+                            end
+                        end
+                        class = class.super
+                    end
+                    table.sort(method_arr)
+                    
+                    for _, method in ipairs(method_arr) do
+                        if imgui.Selectable(method) then
+                        
+                            local cmd = model:create_command("Add function keyframe")
+                            local me = method
+                            local ti = self.selected_track
+                            local t = animp:get_playback_position()
+                            local args = {}
+                            
+                            cmd:add_do_func(function()
+                                animation:function_track_add_key(ti, t, me, args)
+                            end)
+                            
+                            local old_i = animation:get_keyframe_index(ti, t)
+                            if old_i then
+                                local old_method = animation:variable_track_get_key_value(ti, old_i)
+                                local old_args = animation:variable_track_get_key_lerp(ti, old_i)
+                                
+                                cmd:add_undo_func(function()
+                                    animation:function_track_add_key(ti, t, old_method, old_args)
+                                end)
+                                
+                            else
+                                
+                                cmd:add_undo_func(function()
+                                    local i = animation:get_keyframe_index(ti, t)
+                                    animation:remove_keyframe(ti, i)
+                                end)
+                            end
+                            
+                            model:commit_command(cmd)
+                            
+                            close_popup = false
+                        end
+                    end
+                end
+                imgui.EndCombo()            
+            end
+            if close_popup then
+                imgui.CloseCurrentPopup()
+            end
+            
+            imgui.EndPopup()
+        end
+        
 
         imgui.SameLine()
         imgui.PushItemWidth(-132)
@@ -912,7 +1032,7 @@ function AnimationPlugin:draw()
                                     
                                 elseif track_type == "var" then
                                     local old_v = animation:variable_track_get_key_value(index, kf)
-                                    local old_l = animation:variable_track_get_lerp(index, kf)
+                                    local old_l = animation:variable_track_get_key_lerp(index, kf)
                                     cmd:add_undo_func(function()
                                         animation:variable_track_add_key(index, old_t, old_v, old_l)
                                     end)

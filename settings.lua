@@ -79,28 +79,24 @@ local function define_setting(name, default, funcs)
     validators[name] = funcs
 end
 
--- Project settings and constants
+-- Project settings and constants, mostly read_only
 define_setting("config_file", "config.txt", {read_only})
 define_setting("asset_dir", "assets", {read_only})
 define_setting("scene_dir", "scene", {read_only})
 define_setting("backup_ext", "bak", {read_only})
 define_setting("import_ext", "import", {read_only})
-
 define_setting("title", "CoffeeEngine", {read_only})
 define_setting("icon", nil, {read_only})
-
 define_setting("is_debug", false, {is_boolean})
 define_setting("is_editor", false, {is_boolean})
-
 define_setting("game_width", 416, {is_int, is_real, curry(is_greater, 0)})
 define_setting("game_height", 240, {is_int, is_real, curry(is_greater, 0)})
-define_setting("main_scene", "scene/levels/debugroom.scene", {is_string})
-
+define_setting("main_scene", "scene/levels/debugroom.scene", {read_only})
 define_setting("autoload_scenes", {}, {read_only})
 
-define_setting("collision_layer_0_name", "", {read_only})
-define_setting("collision_layer_1_name", "", {read_only})
-define_setting("collision_layer_2_name", "", {read_only})
+define_setting("collision_layer_0_name", "world", {read_only})
+define_setting("collision_layer_1_name", "player", {read_only})
+define_setting("collision_layer_2_name", "enemy", {read_only})
 define_setting("collision_layer_3_name", "", {read_only})
 define_setting("collision_layer_4_name", "", {read_only})
 define_setting("collision_layer_5_name", "", {read_only})
@@ -114,10 +110,11 @@ define_setting("collision_layer_12_name", "", {read_only})
 define_setting("collision_layer_13_name", "", {read_only})
 define_setting("collision_layer_14_name", "", {read_only})
 define_setting("collision_layer_15_name", "", {read_only})
+define_setting("physics_gravity", 900, {read_only})
 
-define_setting("max_loop", 500, {is_int, is_real, curry(is_greater_equal, 100)})
-define_setting("max_accum", 5, {is_int, is_real, curry(is_greater_equal, 1)})
-define_setting("frame_time", 1/60, {is_real, curry(is_greater, 0)})
+define_setting("max_loop", 500, {read_only})
+define_setting("max_accum", 5, {read_only})
+define_setting("frame_time", 1/60, {read_only})
 
 -- Window settings
 define_setting("window_width", 1280, {is_int, is_real, curry(is_greater, 0)})
@@ -144,6 +141,7 @@ define_setting("master_volume", 70, {is_int, curry(is_in_range, 0, 100)})
 define_setting("music_volume", 70, {is_int, curry(is_in_range, 0, 100)})
 define_setting("sfx_volume", 70, {is_int, curry(is_in_range, 0, 100)})
 define_setting("command_dash", false, {is_boolean})
+
 
 function module.get_setting(key)
     return settings[key]

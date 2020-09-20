@@ -59,7 +59,6 @@ end
 
 function ScenePlayer:update(dt)
     if self.open then
-        self.player_tree:update(dt)
         local ok,err = pcall(self.player_tree.update, self.player_tree, dt)
         if not ok then
             log.error(err)

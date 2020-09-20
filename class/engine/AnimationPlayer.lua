@@ -4,6 +4,8 @@ local AnimationPlayer = Node:subclass("AnimationPlayer")
 AnimationPlayer.static.icon = IconFont and IconFont.FILM
 
 AnimationPlayer:define_signal("animation_finished")
+AnimationPlayer:define_signal("animation_looped")
+
 AnimationPlayer:define_get_set("current_animation")
 AnimationPlayer:define_get_set("playback_position")
 
@@ -142,9 +144,11 @@ function AnimationPlayer:update(dt)
     if self.playback_position > anim:get_length() then
         if anim:get_loop() then
             self.playback_position = self.playback_position % anim:get_length()                
+            self:emit_signal("animation_looped")
         else
             self.playback_position = anim:get_length()
             self.playing = false
+            self:emit_signal("animation_finished")
         end            
     end 
     

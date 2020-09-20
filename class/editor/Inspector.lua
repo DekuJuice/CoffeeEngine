@@ -1,5 +1,6 @@
 local Node = require("class.engine.Node")
 local SelectResourceModal = require("class.editor.SelectResourceModal")
+local SignalModal = require("class.editor.SignalModal")
 local ImportedResource = require("class.engine.resource.ImportedResource")
 
 local Inspector = Node:subclass("Inspector")
@@ -13,6 +14,7 @@ function Inspector:initialize()
     self.object = nil
     self.auto_inspect_nodes = true
     self.select_resource_modal = SelectResourceModal()
+    self.signal_modal = SignalModal()
 end
 
 function Inspector:parented(parent)
@@ -343,22 +345,9 @@ function Inspector:_draw_node_inspector()
                 
                 imgui.TableNextRow()
                 imgui.TableSetColumnIndex(1)
-                if imgui.Button(IconFont.TRASH) then
-                    local cmd = model:create_command("Disconnect all signals")
-                    
-                    cmd:add_do_func(function()
-                            node:disconnect_all()
-                        end)
-                        
-                    cmd:add_undo_func(function()
-                            for _,c in ipairs(connections) do
-                                node:connect(name, c.target, c.method)
-                            end
-                        end)
-                    model:commit_command(cmd)
+                if imgui.Button(("%s##%s"):format(IconFont.PLUS, name)) then
+                    editor:get_node("SignalModal"):open( name )
                 end
-                imgui.SameLine()
-                imgui.Button(IconFont.PLUS)
 
                 imgui.TableSetColumnIndex(0)
                 if imgui.TreeNodeEx(name, tree_flags) then
@@ -401,9 +390,7 @@ function Inspector:_draw_node_inspector()
                 
             end
             imgui.EndTable()
-        end
-        
-        
+        end        
     end
     
     imgui.Separator()

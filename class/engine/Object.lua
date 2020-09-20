@@ -112,8 +112,7 @@ function Object:connect(signal, target, method)
     assert(self.signals[signal], ("Invalid signal %s"):format(signal))
     assert(not self:is_connected(signal, target, method), "Signal is already connected")
     assert(type(target[method]) == "function", ("Invalid method %s"):format(tostring(method)))
-    
-    
+        
     self.signals[signal][target] = self.signals[signal][target] or {}
     self.signals[signal][target][method] = true
     
@@ -160,7 +159,7 @@ function Object:is_connected(signal, target, method)
     return self.signals[signal][target] and self.signals[signal][target][method]
 end
 
---- Returns a list of connected objects and methods for the given signal
+--- Returns a list of outgoing connections for the given signal
 -- @param signal the name of the signal
 function Object:get_connections(signal)
     assert(self.signals[signal], ("Invalid signal %s"):format(signal))

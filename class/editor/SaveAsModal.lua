@@ -85,8 +85,7 @@ function SaveAsModal:draw()
         
         if imgui.IsItemDeactivatedAfterEdit() then
             self:validate_path()
-        end
-        
+        end        
         
         imgui.BeginChild("Tree view", 0, -28, {"ImGuiWindowFlags_HorizontalScrollbar"})
         -- Tree view of scenes

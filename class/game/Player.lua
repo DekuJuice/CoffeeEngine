@@ -49,6 +49,7 @@ local class = require("enginelib.middleclass")
 local Obstacle = require("class.engine.Obstacle")
 local Actor = require("class.engine.Actor")
 local Player = Actor:subclass("Player")
+Player:include(require("class.mixin.VelocityHelper"))
 
 -- Player movement states:
 -- standing
@@ -97,22 +98,6 @@ local function jump_behaviour(state, player)
     end
 end
 
-local function wall_jump_behaviour(state, player)
-    
-end
-
-function Player:get_velocity_delta(dt)
-    local delta = self.velocity * dt + self.velocity_remainder
-    local rounded = delta:clone()
-    
-    rounded.x = math.floor(math.abs(rounded.x)) * math.sign(rounded.x)
-    rounded.y = math.floor(math.abs(rounded.y)) * math.sign(rounded.y)
-    
-    self.velocity_remainder = delta - rounded
-        
-    return rounded
-end
-
 function Player:initialize()
     Actor.initialize(self)
     
@@ -134,6 +119,7 @@ function Player:initialize()
 
     self.velocity = vec2(0, 0)
     self.velocity_remainder = vec2(0, 0)
+    self:add_tag("Player")
 end
 
 function Player:ready()
@@ -306,10 +292,10 @@ function AirState:update(player, dt)
     if input.action_is_pressed("jump") then
     
         local wall_jump = 0
-        local left_p = world:query_point(gp + WALL_JUMP_SENSOR_LEFT, player.collision_mask, player)
+        local left_p = world:query_point(gp + WALL_JUMP_SENSOR_LEFT, player.collision_mask, false, true, false)
         
         for _,o in ipairs(left_p) do
-            if o:isInstanceOf(Obstacle) and not o:has_tag("no_wall_slide") then
+            if not o:has_tag("no_wall_slide") then
                 wall_jump = 1
                 break
             end
@@ -317,10 +303,10 @@ function AirState:update(player, dt)
         
         world:pool_push_query(left_p)
         
-        local right_p = world:query_point(gp + WALL_JUMP_SENSOR_RIGHT, player.collision_mask, player)
+        local right_p = world:query_point(gp + WALL_JUMP_SENSOR_RIGHT, player.collision_mask, false, true, false)
         
         for _,o in ipairs(right_p) do
-            if o:isInstanceOf(Obstacle) and not o:has_tag("no_wall_slide") then
+            if not o:has_tag("no_wall_slide") then
                 wall_jump = -1
                 break
             end
@@ -374,12 +360,10 @@ function AirState:update(player, dt)
         
         if player.on_wall_left then
             dir = -1
-            query = world:query_point(gp + WALL_SLIDE_SENSOR_LEFT, player.collision_mask, player)
-            
-            
+            query = world:query_point(gp + WALL_SLIDE_SENSOR_LEFT, player.collision_mask, false, true, false)
         elseif player.on_wall_right then
             dir = 1
-            query = world:query_point(gp + WALL_SLIDE_SENSOR_RIGHT, player.collision_mask, player)
+            query = world:query_point(gp + WALL_SLIDE_SENSOR_RIGHT, player.collision_mask, false, true, false)
         end
         
         for _, o in ipairs(query) do
@@ -428,9 +412,7 @@ function WallSlideState:update(player, dt)
         player.velocity.x = -self.dir * (player.is_dashing and DASH_SPEED or MOVE_SPEED)
         player:lock_control("move")
         player.is_jumping = true
-
-        wall_jumped = true
-        
+        wall_jumped = true        
     end
     
     move_behaviour(self, player)

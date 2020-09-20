@@ -310,6 +310,7 @@ function Editor:initialize()
             "class.editor.CreateResourceModal",
             "class.editor.InstanceSceneModal",
             "class.editor.ReparentNodeModal",
+            "class.editor.SignalModal",
             "class.editor.SaveAsModal",
             "class.editor.OpenSceneModal",
             "class.editor.AlertModal",

@@ -77,8 +77,6 @@ end
 function Sprite:set_texture(texture)
     self.texture = texture
     if texture then
-        self.viewport_pos = vec2(0, 0)
-        self.viewport_dimensions = vec2( texture:get_love_image():getDimensions())
         self:_update_quad()
     end
 end
