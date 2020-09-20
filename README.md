@@ -19,3 +19,13 @@ regarding usage or the current limitations of the engine/editor then feel free
 to contact me.
 
 ![Preview](preview.png?raw=true)
+
+## Usage
+
+To access editor mode, pass -editor to the command line options when running
+the project with LÖVE.
+
+This requires my fork of [love-imgui](https://github.com/DekuJuice/love-imgui), 
+a win64 binary is available there + build instructions.
+
+
