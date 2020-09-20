@@ -24,8 +24,8 @@ SOFTWARE.
 
 ]]--
 
+local Color = require("class.engine.Color")
 local intersect = require("enginelib.intersect")
-
 local Node2d = require("class.engine.Node2d")
 local Sprite = Node2d:subclass("Sprite")
 Sprite.static.icon = IconFont and IconFont.IMAGE
@@ -33,14 +33,14 @@ Sprite.static.icon = IconFont and IconFont.IMAGE
 local Texture = require("class.engine.resource.Texture")
 
 Sprite:export_var("texture", "resource", {resource_type=Texture})
-Sprite:export_var("offset", "vec2_int" )
-Sprite:export_var("scale", "vec2", {speed = 0.01, min = 0, max=8} )
-Sprite:export_var("rotation", "float", {speed = 0.01, min=-math.pi * 2, max=math.pi * 2} )
-Sprite:export_var("flip_h", "bool")
-Sprite:export_var("flip_v", "bool")
+Sprite:export_var("offset", "vec2_int", {default = vec2(0, 0)} )
+Sprite:export_var("scale", "vec2", {default = vec2(1, 1), speed = 0.01, min = 0, max=8} )
+Sprite:export_var("rotation", "float", {default = 0, speed = 0.01, min=-math.pi * 2, max=math.pi * 2} )
+Sprite:export_var("flip_h", "bool", {default = false})
+Sprite:export_var("flip_v", "bool", {default = false})
 Sprite:export_var("color", "color")
-Sprite:export_var("viewport_pos", "vec2_int", {min = -math.huge, max = math.huge} )
-Sprite:export_var("viewport_dimensions", "vec2_int", {min = 0, max = math.huge} )
+Sprite:export_var("viewport_pos", "vec2_int", {default = vec2(0, 0), min = -math.huge, max = math.huge} )
+Sprite:export_var("viewport_dimensions", "vec2_int", {default = vec2(16, 16), min = 0, max = math.huge} )
 
 function Sprite:initialize()
     Node2d.initialize(self)
@@ -49,9 +49,9 @@ function Sprite:initialize()
     self.flip_h = false
     self.flip_v = false
     self.rotation = 0
-    self.color = {1,1,1,1}
+    self.color = Color()
     self.viewport_pos = vec2(0, 0)
-    self.viewport_dimensions = vec2(0, 0)
+    self.viewport_dimensions = vec2(16, 16)
     self.quad = love.graphics.newQuad(0, 0, 0, 0, 0, 0)
 end
 
@@ -108,11 +108,11 @@ function Sprite:set_texture(texture)
 end
 
 function Sprite:set_color(col)
-    self.color = table.copy(col)
+    self.color = col
 end
 
 function Sprite:get_color(col)
-    return table.copy(self.color)
+    return self.color
 end
 
 function Sprite:draw()

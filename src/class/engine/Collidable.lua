@@ -28,8 +28,8 @@ local Node2d = require("class.engine.Node2d")
 local Collidable = Node2d:subclass("Collidable")
 Collidable.static.noinstance = true
 Collidable.static.icon = IconFont and IconFont.SQUARE
-Collidable:export_var("collision_layer", "bitmask", {bits = 16})
-Collidable:export_var("collision_mask", "bitmask", {bits = 16})
+Collidable:export_var("collision_layer", "bitmask", {default = 1, bits = 16})
+Collidable:export_var("collision_mask", "bitmask", {default = 1, bits = 16})
 
 function Collidable:initialize()
     Node2d.initialize(self)

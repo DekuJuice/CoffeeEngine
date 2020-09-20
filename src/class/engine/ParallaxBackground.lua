@@ -27,7 +27,7 @@ SOFTWARE.
 local Sprite = require("class.engine.Sprite")
 
 local ParallaxBackground = Sprite:subclass("ParallaxBackground")
-ParallaxBackground:export_var("scroll_factor", "vec2", {min=-2, max=2, speed=0.01} )
+ParallaxBackground:export_var("scroll_factor", "vec2", {default = vec2(1, 1), min=-2, max=2, speed=0.01} )
 
 function ParallaxBackground:initialize()
     Sprite.initialize(self)

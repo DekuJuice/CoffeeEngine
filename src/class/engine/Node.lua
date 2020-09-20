@@ -55,7 +55,7 @@ Node:export_var("name", "string", {
 })
     
 Node:export_var("tags", "data")
-Node:export_var("visible", "data")
+Node:export_var("visible", "data", {default = true})
 
 function Node:initialize()
     Object.initialize(self)

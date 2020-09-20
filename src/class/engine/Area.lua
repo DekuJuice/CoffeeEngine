@@ -36,8 +36,8 @@ Area:define_signal("obstacle_exited")
 Area:define_signal("area_entered")
 Area:define_signal("area_exited")
 
-Area:export_var("aabb_extents", "vec2_int", {speed = 0.2, min = 0, max = math.huge} )
-Area:export_var("aabb_offset", "vec2_int", {speed = 0.2, min = -math.huge, max = math.huge})
+Area:export_var("aabb_extents", "vec2_int", {default = vec2(16, 16), speed = 0.2, min = 0, max = math.huge} )
+Area:export_var("aabb_offset", "vec2_int", {default = vec2(0, 0), speed = 0.2, min = -math.huge, max = math.huge})
 
 Area:define_get_set("collide_current")
 

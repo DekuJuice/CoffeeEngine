@@ -23,7 +23,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ]]--
-
+local Color = require("class.engine.Color")
 local Node = require("class.engine.Node")
 local SelectResourceModal = require("class.editor.SelectResourceModal")
 local SignalModal = require("class.editor.SignalModal")
@@ -122,14 +122,18 @@ function Inspector:_draw_edit_widget(obj, ptype, export_hints, old_val)
         changed = c
         merge_mode = "merge_ends"
     elseif ptype == "color" then
-        local r,g,b,a = unpack(old_val)
+        local r,g,b,a = old_val[1], old_val[2], old_val[3], old_val[4]
         changed, r, g, b, a = imgui.ColorEdit4("##ColorEdit4f", r,g,b,a, {"ImGuiColorEditFlags_Float"})
         finalized = imgui.IsItemDeactivatedAfterEdit()
         
-        new_val[1] = r
-        new_val[2] = g
-        new_val[3] = b
-        new_val[4] = a
+        if finalized then
+            new_val = Color()
+            new_val[1] = r
+            new_val[2] = g
+            new_val[3] = b
+            new_val[4] = a
+            
+        end
         merge_mode = "merge_ends"
     elseif ptype == "bool" then
         changed, new_val = imgui.Checkbox("##Checkbox", old_val)

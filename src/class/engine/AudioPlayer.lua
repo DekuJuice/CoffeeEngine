@@ -31,14 +31,15 @@ local AudioPlayer = Node2d:subclass("AudioPlayer")
 AudioPlayer.static.icon = IconFont and IconFont.MUSIC
 
 AudioPlayer:export_var("source", "resource", {resource_type=AudioSource})
-AudioPlayer:export_var("autoplay", "bool")
-AudioPlayer:export_var("volume", "float")
-AudioPlayer:export_var("loop", "bool")
+AudioPlayer:export_var("autoplay", "bool", {default = false} )
+AudioPlayer:export_var("volume", "float", {default = 0.5} )
+AudioPlayer:export_var("loop", "bool", {default = false})
 
 function AudioPlayer:initialize()
     Node2d.initialize(self)
     self.source = nil
     self.autoplay = false
+    self.loop = false
     self.volume = 0.5
 end
 

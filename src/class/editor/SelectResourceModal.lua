@@ -63,10 +63,6 @@ function SelectResourceModal:draw()
 
     if should_draw then
         
-        if imgui.Button(("%s Create Resource"):format(IconFont.FILE)) then
-            editor:do_action("Create Resource")
-        end
-        
         imgui.BeginChild("##Tree Area", -1, -32, true, {"ImGuiWindowFlags_HorizontalScrollbar"} )
         
         if imgui.BeginTable("##Table", 1, {"ImGuiTableFlags_RowBg"}) then
