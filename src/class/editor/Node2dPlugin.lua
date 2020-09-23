@@ -33,16 +33,28 @@ local Node2dPlugin = Node:subclass("Node2dPlugin")
 Node2dPlugin.static.dontlist = true
 
 local function traverse_nodes(root)
+
+    if not root then return end
+
     local n = {}
     local stack = {root}
     while #stack > 0 do
         local top = table.remove(stack)
-        table.insert(n, top)
         
-        local children = top:get_children()
-        for i = #children, 1, -1 do
-            local c = children[i]
-            table.insert(stack, c)
+        if top:isInstanceOf(Node2d)
+        and top:get_visible() then
+            
+            table.insert(n, top)
+                    
+            local children = top:get_children()
+            
+            for i = #children, 1, -1 do
+                local c = children[i]
+                if c:get_owner() == root then
+                    table.insert(stack, c)
+                end
+            end
+            
         end
         
     end
@@ -87,10 +99,8 @@ function Node2dPlugin:update_selection()
     
     local selected = {}
     
-    for _,c in ipairs( traverse_nodes(model:get_tree():get_root())) do
-        if c:is_visible_in_tree() 
-        and c:isInstanceOf(Node2d)
-        and c:hit_rect(rmin, rmax) then
+    for _,c in ipairs( traverse_nodes(model:get_tree():get_current_scene())) do
+        if c:hit_rect(rmin, rmax) then
             table.insert(selected, c)
         end
     end
@@ -196,40 +206,37 @@ function Node2dPlugin:draw()
     -- Draw gizmos for node2ds
     local model = editor:get_active_scene_model()    
     
-    for _,c in ipairs(traverse_nodes(model:get_tree():get_root())) do
-        if c:is_visible_in_tree()
-        and c:isInstanceOf(Node2d)  then
-            local sp = editor:transform_to_screen(c:get_global_position())
-            local sw, sh = self:get_tree():get_viewport():get_resolution()
+    for _,c in ipairs(traverse_nodes(model:get_tree():get_current_scene())) do
+        local sp = editor:transform_to_screen(c:get_global_position())
+        local sw, sh = self:get_tree():get_viewport():get_resolution()
+        
+        if sp.x > 0 and sp.x < sw and sp.y > 0 and sp.y < sh then
+           
+            love.graphics.push("all")
             
-            if sp.x > 0 and sp.x < sw and sp.y > 0 and sp.y < sh then
-               
-                love.graphics.push("all")
-                
-                if model:is_selected(c) then
-                    love.graphics.setColor(1,1,1,1)
-                else      
-                    love.graphics.setColor(0, 0, 0, 1)
-                end
-                
-                love.graphics.circle("line", sp.x, sp.y, 5)                
-                love.graphics.rectangle("line", sp.x-2, sp.y-9, 4, 18)
-                love.graphics.rectangle("line", sp.x-9, sp.y-2, 18, 4)
-                love.graphics.setBlendMode("replace")
-                
-                if model:is_selected(c) then
-                    love.graphics.setColor(255/255, 119/255, 119/255, 0.7)
-                else
-                    love.graphics.setColor(220/255, 220/255, 220/255, 0.3)
-                end
-                
-                love.graphics.rectangle("fill", sp.x-1, sp.y-8, 2, 16)
-                love.graphics.rectangle("fill", sp.x-8, sp.y-1, 16, 2)
-                love.graphics.circle("fill", sp.x, sp.y, 3)
-                
-                love.graphics.pop()
-               
+            if model:is_selected(c) then
+                love.graphics.setColor(1,1,1,1)
+            else      
+                love.graphics.setColor(0, 0, 0, 1)
             end
+            
+            love.graphics.circle("line", sp.x, sp.y, 5)                
+            love.graphics.rectangle("line", sp.x-2, sp.y-9, 4, 18)
+            love.graphics.rectangle("line", sp.x-9, sp.y-2, 18, 4)
+            love.graphics.setBlendMode("replace")
+            
+            if model:is_selected(c) then
+                love.graphics.setColor(255/255, 119/255, 119/255, 0.7)
+            else
+                love.graphics.setColor(220/255, 220/255, 220/255, 0.3)
+            end
+            
+            love.graphics.rectangle("fill", sp.x-1, sp.y-8, 2, 16)
+            love.graphics.rectangle("fill", sp.x-8, sp.y-1, 16, 2)
+            love.graphics.circle("fill", sp.x, sp.y, 3)
+            
+            love.graphics.pop()
+           
         end
     end
 end
@@ -269,12 +276,10 @@ function Node2dPlugin:mousepressed(x, y, button)
         
         -- Otherwise see if we hit any others
         if not node_hit then
-            local nodes = traverse_nodes(model:get_tree():get_root())
+            local nodes = traverse_nodes(model:get_tree():get_current_scene())
             for i = #nodes, 1, -1 do
                 local c = nodes[i]
-                if c:is_visible_in_tree() 
-                and c:isInstanceOf(Node2d) 
-                and c:hit_point( wpoint ) then
+                if c:hit_point( wpoint ) then
                     model:set_selected_nodes({c})
                     node_hit = true
                     break
