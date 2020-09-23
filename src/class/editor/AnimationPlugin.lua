@@ -239,7 +239,7 @@ function AnimationPlugin:_draw_new_track_modal()
         imgui.BeginChild("##Tree Area", -1, -28, true, {"ImGuiWindowFlags_HorizontalScrollbar"} )
 
         if imgui.BeginTable("##Table", 1, {"ImGuiTableFlags_RowBg", "ImGuiTableFlags_BordersVInner"}) then
-            local root = model:get_tree():get_root()
+            local root = model:get_tree():get_current_scene()
 
             local stack = { root }
             while #stack > 0 do

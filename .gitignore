@@ -1,2 +1,5 @@
 *.dll
 *.bak
+src/scene
+src/class/game
+src/assets
