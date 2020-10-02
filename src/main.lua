@@ -375,7 +375,10 @@ end
 
 function love.update(dt)
     if main.update then
+    
+    
         main:update(dt)
+
     end
 end
 
@@ -391,6 +394,8 @@ function love.draw()
     end
 
     if main.draw then
+    
+
         main:draw(0, 0, love.graphics.getDimensions())
     end
 
@@ -398,6 +403,8 @@ function love.draw()
         -- Newest version of imgui seems to have random errors in drawlist,
         -- pcall render so we don't crash
         -- NOTE: This seems to be have fixed in the 1.78wip
+        
+        local gb = collectgarbage("count")
         local ok, err = pcall(imgui.Render)
         if err then log.error(err) end
     end

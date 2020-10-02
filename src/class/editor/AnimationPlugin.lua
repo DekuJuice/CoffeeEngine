@@ -84,45 +84,6 @@ function AnimationPlugin:initialize()
     self.func_track_popup_open = false
 end
 
-function AnimationPlugin:enter_tree()
-    local scene = self:get_parent():get_active_scene_model()
-
-    local test_anim = Animation()
-    test_anim:add_function_track("..")
-    test_anim:add_variable_track("..", "position", false, false)
-    test_anim:function_track_add_key(1, 0.25, "func_a")
-    test_anim:function_track_add_key(1, 0.5, "func_b")
-
-    test_anim:variable_track_add_key(2, 0.3, vec2(20, 20))
-    test_anim:variable_track_add_key(2, 0.6, vec2(40, 60))
-    test_anim:set_loop(true)
-
-    local ap = AnimationPlayer()
-    ap:add_animation(test_anim)
-
-    local n2 = require("class.engine.Node2d")()
-    scene:get_tree():set_current_scene(n2)
-    
-    local n3 = require("class.engine.Node2d")()
-    
-    n2:add_child(ap)
-    ap:set_owner( n2 )
-    ap:add_child(n3)
-    n3:set_owner(n2)
-    
-    ap:connect("animation_looped", n3, "print_tree")
-
-    scene:set_selected_nodes({ap})
-
-    self.selected_animation = "Unnamed"
-    
-    local parent = self:get_parent()
-    parent:add_action("Show Inspector", function()
-        self.is_open = not self.is_open
-    end)
-    
-end
-
 function AnimationPlugin:update(dt)
     if not love.mouse.isDown(1) then
         self.timeline_drag = false

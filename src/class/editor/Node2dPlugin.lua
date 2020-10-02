@@ -33,10 +33,10 @@ local Node2dPlugin = Node:subclass("Node2dPlugin")
 Node2dPlugin.static.dontlist = true
 
 local function traverse_nodes(root)
-
-    if not root then return end
-
     local n = {}
+
+    if not root then return n end
+
     local stack = {root}
     while #stack > 0 do
         local top = table.remove(stack)
